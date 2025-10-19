@@ -15,5 +15,17 @@ dependencies = [
     "protobuf>=6.31.1",
     "pyarrow>=20.0.0",
     "pyspark>=4.0.0",
+    "ruff>=0.14.1",
     "tqdm>=4.67.1",
+    "zstd>=1.5.7.2",
 ]
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+extend-select = ["I"]
+
+[tool.ruff.lint.isort]
+case-sensitive = true
+force-single-line = true
