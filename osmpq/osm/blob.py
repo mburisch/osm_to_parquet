@@ -54,7 +54,8 @@ def decompress_blob(blob: Blob) -> bytes:
             raise ValueError("Blob has no data")
 
 
-def decode_blob(header: BlobHeader, blob: Blob) -> HeaderBlock | PrimitiveBlock:
+def decode_blob(header: BlobHeader, blob_data: bytes) -> HeaderBlock | PrimitiveBlock:
+    blob = Blob.FromString(blob_data)
     data = decompress_blob(blob)
     match header.type:
         case "OSMHeader":

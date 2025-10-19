@@ -149,18 +149,30 @@ class PrimitiveBlockDecoder:
         )
 
 
-def decode_block(block: PrimitiveBlock) -> Generator[OsmElement, None, None]:
-    decoder = PrimitiveBlockDecoder(block)
-
-    for group in block.primitivegroup:
+def decode_nodes(decoder: PrimitiveBlockDecoder) -> Generator[OsmNode, None, None]:
+    for group in decoder.block.primitivegroup:
         for node in group.nodes:
             yield decoder.decode_node(node)
 
         if group.dense is not None:
             yield from decoder.decode_dense_nodes(group.dense)
 
+
+def decode_ways(decoder: PrimitiveBlockDecoder) -> Generator[OsmWay, None, None]:
+    for group in decoder.block.primitivegroup:
         for way in group.ways:
             yield decoder.decode_way(way)
 
+
+def decode_relations(decoder: PrimitiveBlockDecoder) -> Generator[OsmRelation, None, None]:
+    for group in decoder.block.primitivegroup:
         for relation in group.relations:
             yield decoder.decode_relation(relation)
+
+
+def decode_block(block: PrimitiveBlock) -> Generator[OsmElement, None, None]:
+    decoder = PrimitiveBlockDecoder(block)
+
+    yield from decode_nodes(decoder)
+    yield from decode_ways(decoder)
+    yield from decode_relations(decoder)
