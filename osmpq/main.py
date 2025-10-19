@@ -47,8 +47,8 @@ def decoder_process(queue: multiprocessing.Queue, done: Any) -> None:
 
 
 def main():
-    # path = Path("/workspaces/data/osm/nevada-latest.osm.pbf")
-    path = Path("/workspaces/data/osm/us-latest.osm.pbf")
+    path = Path("/workspaces/data/osm/nevada-latest.osm.pbf")
+    # path = Path("/workspaces/data/osm/us-latest.osm.pbf")
 
     queue = multiprocessing.Queue()
     done = multiprocessing.Value("i", 1)
