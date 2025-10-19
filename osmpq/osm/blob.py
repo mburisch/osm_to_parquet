@@ -16,7 +16,7 @@ from osmpq.protos.osmformat_pb2 import PrimitiveBlock
 @dataclass(frozen=True)
 class BlobData:
     header: BlobHeader
-    blob: Blob
+    data: bytes
 
 
 def read_blob_data(source: BinaryIO) -> BlobData | None:
@@ -30,9 +30,8 @@ def read_blob_data(source: BinaryIO) -> BlobData | None:
     blob_header = BlobHeader.FromString(data)
 
     data = source.read(blob_header.datasize)
-    blob = Blob.FromString(data)
 
-    return BlobData(header=blob_header, blob=blob)
+    return BlobData(header=blob_header, data=data)
 
 
 def read_blobs(source: BinaryIO) -> Generator[BlobData, None, None]:
@@ -66,30 +65,7 @@ def decode_blob(header: BlobHeader, blob: Blob) -> HeaderBlock | PrimitiveBlock:
             raise ValueError(f"Unknown blob type: {header.type}")
 
 
-def decode_blob_data(blob_data: BlobData) -> HeaderBlock | PrimitiveBlock:
-    block = decode_blob(blob_data.header, blob_data.blob)
-    return block
-
-
-def read_blob_raw_bytes(source: BinaryIO) -> BlobData | None:
-    data = source.read(4)
-    if len(data) == 0:
-        return None
-
-    header_size = int.from_bytes(data, "big")
-    data = source.read(header_size)
-    blob_header = BlobHeader.FromString(data)
-
-    data = source.read(blob_header.datasize)
-
-    return BlobData(header=blob_header, blob=data)
-
-
-def read_blob_bytes(source: BinaryIO) -> Generator[bytes, None, None]:
-    while True:
-        data = read_blob_raw_bytes(source)
-        if data is None:
-            return
-        if data.header.type == "OSMHeader":
-            continue
-        yield data.blob
+def decode_primtive_blob(blob_data: bytes) -> PrimitiveBlock:
+    blob = Blob.FromString(blob_data)
+    data = decompress_blob(blob)
+    return PrimitiveBlock.FromString(data)
