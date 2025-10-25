@@ -4,7 +4,6 @@ from collections.abc import Generator
 from collections.abc import Iterable
 from collections.abc import Sequence
 
-from osmpq.osm.types import OsmElement
 from osmpq.osm.types import OsmInfo
 from osmpq.osm.types import OsmNode
 from osmpq.osm.types import OsmRelation
@@ -24,7 +23,7 @@ def delta_decode(values: Iterable[int]) -> Generator[int, None, None]:
     current = 0
     for value in values:
         current += value
-        yield value
+        yield current
 
 
 class ValueDecoder:
@@ -119,8 +118,8 @@ class PrimitiveBlockDecoder:
                 id=id,
                 info=info,
                 tags=tags or None,
-                latitude=lat or None,
-                longitude=lon or None,
+                latitude=self.value_decoder.lat(lat),
+                longitude=self.value_decoder.lon(lon),
             )
 
     def decode_way(self, way: Way) -> OsmWay:
@@ -168,11 +167,3 @@ def decode_relations(decoder: PrimitiveBlockDecoder) -> Generator[OsmRelation, N
     for group in decoder.block.primitivegroup:
         for relation in group.relations:
             yield decoder.decode_relation(relation)
-
-
-def decode_block(block: PrimitiveBlock) -> Generator[OsmElement, None, None]:
-    decoder = PrimitiveBlockDecoder(block)
-
-    yield from decode_nodes(decoder)
-    yield from decode_ways(decoder)
-    yield from decode_relations(decoder)

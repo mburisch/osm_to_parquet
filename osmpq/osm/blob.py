@@ -3,6 +3,7 @@ from __future__ import annotations
 import zlib
 from collections.abc import Generator
 from dataclasses import dataclass
+from enum import Enum
 from typing import BinaryIO
 
 import zstd
@@ -13,10 +14,16 @@ from osmpq.protos.osmformat_pb2 import HeaderBlock
 from osmpq.protos.osmformat_pb2 import PrimitiveBlock
 
 
+class BlobType(Enum):
+    OSM_HEADER = "OSMHeader"
+    OSM_DATA = "OSMData"
+
+
 @dataclass(frozen=True)
 class BlobData:
     header: BlobHeader
-    data: bytes
+    header_data: bytes
+    blob_data: bytes
 
 
 def read_blob_data(source: BinaryIO) -> BlobData | None:
@@ -26,12 +33,12 @@ def read_blob_data(source: BinaryIO) -> BlobData | None:
 
     header_size = int.from_bytes(data, "big")
 
-    data = source.read(header_size)
-    blob_header = BlobHeader.FromString(data)
+    header_data = source.read(header_size)
+    blob_header = BlobHeader.FromString(header_data)
 
-    data = source.read(blob_header.datasize)
+    blob_data = source.read(blob_header.datasize)
 
-    return BlobData(header=blob_header, data=data)
+    return BlobData(header=blob_header, header_data=header_data, blob_data=blob_data)
 
 
 def read_blobs(source: BinaryIO) -> Generator[BlobData, None, None]:
@@ -58,12 +65,18 @@ def decode_blob(header: BlobHeader, blob_data: bytes) -> HeaderBlock | Primitive
     blob = Blob.FromString(blob_data)
     data = decompress_blob(blob)
     match header.type:
-        case "OSMHeader":
+        case BlobType.OSM_HEADER.value:
             return HeaderBlock.FromString(data)
-        case "OSMData":
+        case BlobType.OSM_DATA.value:
             return PrimitiveBlock.FromString(data)
         case _:
             raise ValueError(f"Unknown blob type: {header.type}")
+
+
+def decode_header_blob(blob_data: bytes) -> HeaderBlock:
+    blob = Blob.FromString(blob_data)
+    data = decompress_blob(blob)
+    return HeaderBlock.FromString(data)
 
 
 def decode_primtive_blob(blob_data: bytes) -> PrimitiveBlock:

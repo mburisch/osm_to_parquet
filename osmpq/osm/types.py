@@ -48,6 +48,3 @@ class OsmRelation:
     info: OsmInfo
     tags: OsmTags | None
     members: list[OsmRelationMember]
-
-
-OsmElement = OsmNode | OsmWay | OsmRelation
