@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import uuid
-from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
@@ -85,108 +84,111 @@ ARROW_ELEMENT_SCHEMA = pa.schema(
 )
 
 
-def record_batch_for_nodes(nodes: list[OsmNode]) -> pa.RecordBatch:
-    n = len(nodes)
-    ids = [0] * n
-    versions = [0] * n
-    tags = [None] * n
-    latitude = [0.0] * n
-    longitude = [0.0] * n
-    timestamp = [0] * n
-    changeset = [0] * n
-    uid = [0] * n
-    user_sid = [0] * n
-    for i, node in enumerate(nodes):
-        ids[i] = node.id
-        versions[i] = node.info.version
+def record_batch_for_nodes(nodes: list[OsmNode]) -> pa.RecordBatch | None:
+    if not nodes:
+        return None
+
+    ids = [node.id for node in nodes]
+    versions = [node.info.version for node in nodes]
+    latitudes = [node.latitude for node in nodes]
+    longitudes = [node.longitude for node in nodes]
+    timestamps = [node.info.timestamp for node in nodes]
+    changesets = [node.info.changeset for node in nodes]
+    uids = [node.info.uid for node in nodes]
+    user_sids = [node.info.user_sid for node in nodes]
+
+    tags = []
+    for node in nodes:
         if node.tags is not None:
-            tags[i] = [(k, v) for k, v in node.tags.items()]
-        latitude[i] = node.latitude
-        longitude[i] = node.longitude
-        timestamp[i] = node.info.timestamp
-        changeset[i] = node.info.changeset
-        uid[i] = node.info.uid
-        user_sid[i] = node.info.user_sid
+            tags.append([(k, v) for k, v in node.tags.items()])
+        else:
+            tags.append(None)
 
-    return pa.RecordBatch.from_pydict(
-        {
-            "id": ids,
-            "version": versions,
-            "tags": tags,
-            "latitude": latitude,
-            "longitude": longitude,
-            "timestamp": timestamp,
-            "changeset": changeset,
-            "uid": uid,
-            "user_sid": user_sid,
-        },
-        schema=ARROW_NODE_SCHEMA,
-    )
+    arrays = [
+        pa.array(ids, type=pa.int64()),
+        pa.array(versions, type=pa.int32()),
+        pa.array(tags, type=pa.map_(pa.string(), pa.string())),
+        pa.array(latitudes, type=pa.float64()),
+        pa.array(longitudes, type=pa.float64()),
+        pa.array(timestamps, type=pa.int64()),
+        pa.array(changesets, type=pa.int64()),
+        pa.array(uids, type=pa.int64()),
+        pa.array(user_sids, type=pa.string()),
+    ]
+
+    return pa.RecordBatch.from_arrays(arrays, schema=ARROW_NODE_SCHEMA)
 
 
-# return {
-#     "id": node.id,
-#     "version": node.info.version,
-#     "tags": node.tags,
-#     "latitude": node.latitude,
-#     "longitude": node.longitude,
-#     "timestamp": node.info.timestamp,
-#     "changeset": node.info.changeset,
-#     "uid": node.info.uid,
-#     "user_sid": node.info.user_sid,
-# }
+def record_batch_for_ways(ways: list[OsmWay]) -> pa.RecordBatch | None:
+    if not ways:
+        return None
+
+    ids = [way.id for way in ways]
+    versions = [way.info.version for way in ways]
+    nodes = [way.nodes for way in ways]
+    timestamps = [way.info.timestamp for way in ways]
+    changesets = [way.info.changeset for way in ways]
+    uids = [way.info.uid for way in ways]
+    user_sids = [way.info.user_sid for way in ways]
+
+    tags = []
+    for way in ways:
+        if way.tags is not None:
+            tags.append([(k, v) for k, v in way.tags.items()])
+        else:
+            tags.append(None)
+
+    arrays = [
+        pa.array(ids, type=pa.int64()),
+        pa.array(versions, type=pa.int32()),
+        pa.array(tags, type=pa.map_(pa.string(), pa.string())),
+        pa.array(nodes, type=pa.list_(pa.int64())),
+        pa.array(timestamps, type=pa.int64()),
+        pa.array(changesets, type=pa.int64()),
+        pa.array(uids, type=pa.int64()),
+        pa.array(user_sids, type=pa.string()),
+    ]
+
+    return pa.RecordBatch.from_arrays(arrays, schema=ARROW_WAY_SCHEMA)
 
 
-def get_arrow_node(node: OsmNode) -> dict[str, Any]:
-    return {
-        "id": node.id,
-        "version": node.info.version,
-        "tags": node.tags,
-        "latitude": node.latitude,
-        "longitude": node.longitude,
-        "timestamp": node.info.timestamp,
-        "changeset": node.info.changeset,
-        "uid": node.info.uid,
-        "user_sid": node.info.user_sid,
-    }
+def record_batch_for_relations(relations: list[OsmRelation]) -> pa.RecordBatch | None:
+    if not relations:
+        return None
 
+    ids = [relation.id for relation in relations]
+    versions = [relation.info.version for relation in relations]
+    timestamps = [relation.info.timestamp for relation in relations]
+    changesets = [relation.info.changeset for relation in relations]
+    uids = [relation.info.uid for relation in relations]
+    user_sids = [relation.info.user_sid for relation in relations]
 
-def get_arrow_way(way: OsmWay) -> dict[str, Any]:
-    return {
-        "id": way.id,
-        "version": way.info.version,
-        "tags": way.tags,
-        "nodes": way.nodes,
-        "timestamp": way.info.timestamp,
-        "changeset": way.info.changeset,
-        "uid": way.info.uid,
-        "user_sid": way.info.user_sid,
-    }
+    tags = []
+    for relation in relations:
+        if relation.tags is not None:
+            tags.append([(k, v) for k, v in relation.tags.items()])
+        else:
+            tags.append(None)
 
+    members = []
+    for relation in relations:
+        if relation.members is not None:
+            members.append([(m.id, m.role, m.type) for m in relation.members])
+        else:
+            members.append(None)
 
-def get_arrow_relation(relation: OsmRelation) -> dict[str, Any]:
-    return {
-        "id": relation.id,
-        "version": relation.info.version,
-        "tags": relation.tags,
-        "members": [{"id": member.id, "role": member.role, "type": member.type} for member in relation.members],
-        "timestamp": relation.info.timestamp,
-        "changeset": relation.info.changeset,
-        "uid": relation.info.uid,
-        "user_sid": relation.info.user_sid,
-    }
+    arrays = [
+        pa.array(ids, type=pa.int64()),
+        pa.array(versions, type=pa.int32()),
+        pa.array(tags, type=pa.map_(pa.string(), pa.string())),
+        pa.array(members),
+        pa.array(timestamps, type=pa.int64()),
+        pa.array(changesets, type=pa.int64()),
+        pa.array(uids, type=pa.int64()),
+        pa.array(user_sids, type=pa.string()),
+    ]
 
-
-def get_node_batch(nodes: Iterable[OsmNode]) -> pa.RecordBatch:
-    return pa.RecordBatch.from_pylist([get_arrow_node(n) for n in nodes], schema=ARROW_NODE_SCHEMA)
-
-
-def get_way_batch(ways: Iterable[OsmWay]) -> pa.RecordBatch:
-    return pa.RecordBatch.from_pylist([get_arrow_way(w) for w in ways], schema=ARROW_WAY_SCHEMA)
-
-
-def get_relation_batch(relations: Iterable[OsmRelation]) -> pa.RecordBatch:
-    return pa.RecordBatch.from_pylist([get_arrow_relation(r) for r in relations], schema=ARROW_RELATION_SCHEMA)
+    return pa.RecordBatch.from_arrays(arrays, schema=ARROW_RELATION_SCHEMA)
 
 
 @dataclass
@@ -246,9 +248,11 @@ class ParquetBatchWriter:
 
         return self._writer
 
-    def write(self, nodes: pa.RecordBatch) -> int:
+    def write(self, batch: pa.RecordBatch | None) -> None:
+        if batch is None:
+            return
         writer = self._get_writer()
-        writer.write(nodes)
+        writer.write(batch)
         if self._should_switch_writer():
             self.close()
 

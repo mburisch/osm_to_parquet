@@ -14,10 +14,9 @@ from osmpq.arrow import ARROW_RELATION_SCHEMA
 from osmpq.arrow import ARROW_WAY_SCHEMA
 from osmpq.arrow import ParquetBatchWriter
 from osmpq.arrow import WriterConfig
-from osmpq.arrow import get_node_batch
-from osmpq.arrow import get_relation_batch
-from osmpq.arrow import get_way_batch
 from osmpq.arrow import record_batch_for_nodes
+from osmpq.arrow import record_batch_for_relations
+from osmpq.arrow import record_batch_for_ways
 from osmpq.helper import join_path
 from osmpq.osm.blob import BlobType
 from osmpq.osm.blob import decode_header_blob
@@ -68,11 +67,9 @@ class Writer:
         block = decode_primtive_blob(bytes(blob_data))
         decoder = PrimitiveBlockDecoder(block)
 
-        # self.nodes_writer.write(get_node_batch(decode_nodes(decoder)))
         self.nodes_writer.write(record_batch_for_nodes(list(decode_nodes(decoder))))
-
-        # self.ways_writer.write(get_way_batch(decode_ways(decoder)))
-        # self.relations_writer.write(get_relation_batch(decode_relations(decoder)))
+        self.ways_writer.write(record_batch_for_ways(list(decode_ways(decoder))))
+        self.relations_writer.write(record_batch_for_relations(list(decode_relations(decoder))))
 
     def __enter__(self) -> Writer:
         return self
