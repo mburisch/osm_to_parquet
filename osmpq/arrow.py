@@ -75,15 +75,6 @@ ARROW_RELATION_FIELDS = [
 ARROW_RELATION_SCHEMA = pa.schema(ARROW_RELATION_FIELDS)
 
 
-ARROW_ELEMENT_SCHEMA = pa.schema(
-    [
-        pa.field("nodes", pa.list_(pa.struct(ARROW_NODE_FIELDS))),
-        pa.field("ways", pa.list_(pa.struct(ARROW_WAY_FIELD))),
-        pa.field("relations", pa.list_(pa.struct(ARROW_RELATION_FIELDS))),
-    ]
-)
-
-
 def record_batch_for_nodes(nodes: list[OsmNode]) -> pa.RecordBatch | None:
     if not nodes:
         return None

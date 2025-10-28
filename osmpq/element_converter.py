@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from typing import Any
 from typing import Iterable
 from typing import Protocol
@@ -85,8 +86,8 @@ class BlobRow(Protocol):
     blob_data: bytes
 
 
-def make_processor(root_path: str, config: WriterConfig) -> Any:
-    def process(rows: Iterable[BlobRow]) -> None:
+def make_processor(root_path: str, config: WriterConfig) -> Callable[[Iterable[BlobRow]], None]:
+    def func(rows: Iterable[BlobRow]) -> None:
         with Writer(root_path, config=config) as writer:
             for row in rows:
                 match row.blob_type:
@@ -95,7 +96,7 @@ def make_processor(root_path: str, config: WriterConfig) -> Any:
                     case BlobType.OSM_DATA.value:
                         writer.write_elements(row.blob_data)
 
-    return process
+    return func
 
 
 def prepare_output_path(output_path: str) -> None:
@@ -107,9 +108,9 @@ def prepare_output_path(output_path: str) -> None:
     fs.create_dir(join_path(path, "relations/"))
 
 
-def blobs_to_elements(blobs: DataFrame, output_path: str) -> None:
+def blobs_to_elements(blobs: DataFrame, writer_config: WriterConfig, output_path: str) -> None:
     prepare_output_path(output_path)
-    config = WriterConfig(max_file_size=128 * 1024 * 1024)
+
     processor = make_processor(output_path, config=config)
 
     blobs.foreachPartition(lambda partition: processor(partition))

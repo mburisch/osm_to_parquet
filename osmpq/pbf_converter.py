@@ -52,20 +52,8 @@ def write_records(path: str, records: Iterable[pa.RecordBatch], config: WriterCo
             writer.write(record)
 
 
-class ProcessorConfig:
-    pbf_batch_size: int = 16
-
-    max_rows_per_group: int = 16
-    max_file_size: int = 128 * 1024 * 1024
-
-
-def pbf_to_blobs(pbf_filename: str, output_path: str, config: ProcessorConfig) -> None:
-    writer_config = WriterConfig(
-        max_rows_per_group=config.max_rows_per_group,
-        max_file_size=config.max_file_size,
-    )
-
+def pbf_to_blobs(pbf_filename: str, output_path: str, writer_config: WriterConfig) -> None:
     blobs = read_blob_data(pbf_filename)
     blobs = tqdm(blobs, desc="Reading blobs", unit_scale=True)
-    records = to_record_batches(blobs, config.pbf_batch_size)
+    records = to_record_batches(blobs, writer_config.max_rows_per_group)
     write_records(output_path, records, writer_config)
