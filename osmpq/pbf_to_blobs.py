@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 
-from osmpq.arrow import WriterConfig
+from osmpq.parquet import WriterConfig
 from osmpq.pbf_converter import pbf_to_blobs
 
 

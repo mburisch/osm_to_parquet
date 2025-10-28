@@ -184,7 +184,7 @@ def record_batch_for_relations(relations: list[OsmRelation]) -> pa.RecordBatch |
 
 @dataclass
 class WriterConfig:
-    max_rows_per_group: int | None = None
+    max_row_group_size: int | None = None
     max_rows_per_file: int | None = None
     max_file_size: int | None = None
 
@@ -249,7 +249,7 @@ class ParquetBatchWriter:
 
     def _should_switch_writer(self) -> None:
         if self._writer is None:
-            return True
+            return False
 
         if self.writer_config.max_rows_per_file:
             if self._writer.written_rows >= self.writer_config.max_rows_per_file:
@@ -259,8 +259,6 @@ class ParquetBatchWriter:
             if self._writer.written_batches % 10 == 0:
                 if self.fs.get_file_info(self._writer.filename).size >= self.writer_config.max_file_size:
                     return True
-
-        return False
 
     def close(self) -> None:
         if self._writer is not None:

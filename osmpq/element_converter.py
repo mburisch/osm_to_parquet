@@ -10,14 +10,6 @@ import pyarrow as pa
 from google.protobuf.json_format import MessageToDict
 from pyspark.sql import DataFrame
 
-from osmpq.arrow import ARROW_NODE_SCHEMA
-from osmpq.arrow import ARROW_RELATION_SCHEMA
-from osmpq.arrow import ARROW_WAY_SCHEMA
-from osmpq.arrow import ParquetBatchWriter
-from osmpq.arrow import WriterConfig
-from osmpq.arrow import record_batch_for_nodes
-from osmpq.arrow import record_batch_for_relations
-from osmpq.arrow import record_batch_for_ways
 from osmpq.helper import join_path
 from osmpq.osm.blob import BlobType
 from osmpq.osm.blob import decode_header_blob
@@ -26,6 +18,14 @@ from osmpq.osm.elements import PrimitiveBlockDecoder
 from osmpq.osm.elements import decode_nodes
 from osmpq.osm.elements import decode_relations
 from osmpq.osm.elements import decode_ways
+from osmpq.parquet import ARROW_NODE_SCHEMA
+from osmpq.parquet import ARROW_RELATION_SCHEMA
+from osmpq.parquet import ARROW_WAY_SCHEMA
+from osmpq.parquet import ParquetBatchWriter
+from osmpq.parquet import WriterConfig
+from osmpq.parquet import record_batch_for_nodes
+from osmpq.parquet import record_batch_for_relations
+from osmpq.parquet import record_batch_for_ways
 
 
 class Writer:
@@ -111,6 +111,6 @@ def prepare_output_path(output_path: str) -> None:
 def blobs_to_elements(blobs: DataFrame, writer_config: WriterConfig, output_path: str) -> None:
     prepare_output_path(output_path)
 
-    processor = make_processor(output_path, config=config)
+    processor = make_processor(output_path, config=writer_config)
 
     blobs.foreachPartition(lambda partition: processor(partition))

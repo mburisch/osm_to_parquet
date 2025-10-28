@@ -1,100 +1,12 @@
-use arrow::{array::RecordBatch, datatypes::Schema};
-use crossbeam_channel::{Receiver, Sender, bounded};
 use indicatif::{ProgressBar, ProgressStyle};
 use osm_to_parquet::{
-    osm::{
-        blobs::{BlobData, read_osm_data},
-        elements::{OsmData, decode_primitive_block},
-        pbf::PbfReader,
-        types::{OsmElement, OsmNode, OsmRelation, OsmWay},
-    },
-    parquet::{
-        parquet::{ParquetFilenameGenerator, ParquetWriter},
-        records::RecordBatchConverter,
-        schemas::{get_node_schema, get_relation_schema, get_way_schema},
-    },
-    pipeline::{OsmChannels, OsmSendChannels},
+    osm::{blobs::read_osm_data, elements::OsmData, pbf::PbfReader},
+    parquet::parquet::{OsmParquetWriter, WriteStatistics, WriterConfig},
 };
-use std::{io::Read, sync::Arc, thread, time};
+use rayon::prelude::*;
+use std::time;
 
-fn blob_reader_func<Source: Read>(
-    pbf: PbfReader<Source>,
-    blob_sender: Sender<BlobData>,
-) -> impl FnOnce() {
-    move || {
-        for blob in pbf.into_iter() {
-            blob_sender.send(blob).unwrap();
-        }
-    }
-}
-
-fn element_decoder_func(
-    blob_receiver: Receiver<BlobData>,
-    osm_channels: OsmSendChannels<OsmNode, OsmWay, OsmRelation>,
-) -> impl Fn() {
-    move || {
-        for blob in blob_receiver.iter() {
-            let data = read_osm_data(&blob).unwrap();
-            let elements = match data {
-                OsmData::Header(_) => Vec::new(),
-                OsmData::Primitive(primitive) => decode_primitive_block(&primitive),
-            };
-            for element in elements {
-                match element {
-                    OsmElement::Node(node) => {
-                        osm_channels.node.send(node).unwrap();
-                    }
-                    OsmElement::Way(way) => {
-                        osm_channels.way.send(way).unwrap();
-                    }
-                    OsmElement::Relation(relation) => {
-                        osm_channels.relation.send(relation).unwrap();
-                    }
-                }
-            }
-        }
-    }
-}
-
-fn record_batch_generator<T>(
-    receiver: Receiver<Arc<T>>,
-    sender: Sender<Arc<RecordBatch>>,
-    capacity: usize,
-) -> impl Fn()
-where
-    T: RecordBatchConverter<T>,
-{
-    move || {
-        let mut batch = Vec::with_capacity(capacity);
-        for item in receiver.iter() {
-            batch.push(item);
-            if batch.len() == capacity {
-                let record_batch = T::create_record_batch(&batch);
-                sender.send(record_batch).unwrap();
-                batch.clear();
-            }
-        }
-    }
-}
-
-fn parquet_writer_func(
-    receiver: Receiver<Arc<RecordBatch>>,
-    filename_getter: ParquetFilenameGenerator,
-    schema: Arc<Schema>,
-    bar: ProgressBar,
-) -> impl FnOnce() {
-    move || {
-        let mut writer = ParquetWriter::new(schema.clone(), filename_getter, 128_000_000);
-
-        for item in receiver.iter() {
-            writer.write(&item);
-            bar.inc(item.num_rows() as u64);
-        }
-        writer.close();
-    }
-}
-
-fn make_pbar() -> ProgressBar {
+fn make_progress_bar() -> ProgressBar {
     let bar = ProgressBar::new_spinner();
     bar.set_style(
         ProgressStyle::with_template(
@@ -107,69 +19,37 @@ fn make_pbar() -> ProgressBar {
 }
 
 fn main() {
-    //let filename = "/workspaces/data/osm/nevada-latest.osm.pbf";
-    let filename = "/workspaces/data/osm/us-latest.osm.pbf";
+    let filename = "/workspaces/data/osm/nevada-latest.osm.pbf";
+    //let filename = "/workspaces/data/osm/us-latest.osm.pbf";
     println!("Processing {}", filename);
     let pbf = PbfReader::with_filename(filename).unwrap();
 
-    let bar = make_pbar();
+    let progress_bar = make_progress_bar();
 
-    let (blob_sender, blob_receiver) = bounded(100);
-    let osm_channels = OsmChannels::new(100_000);
-    let record_channels = OsmChannels::new(100_000);
+    let config = WriterConfig::new();
 
-    thread::scope(|s| {
-        s.spawn(blob_reader_func(pbf, blob_sender));
+    let root_path = "/tmp/osm";
 
-        for _ in 0..6 {
-            s.spawn(element_decoder_func(
-                blob_receiver.clone(),
-                osm_channels.send_channels(),
-            ));
-        }
+    // rayon::ThreadPoolBuilder::new()
+    //     .num_threads(2)
+    //     .build_global()
+    //     .unwrap();
 
-        for _ in 0..8 {
-            s.spawn(record_batch_generator(
-                osm_channels.node_receiver.clone(),
-                record_channels.node_sender.clone(),
-                1000,
-            ));
-            s.spawn(record_batch_generator(
-                osm_channels.way_receiver.clone(),
-                record_channels.way_sender.clone(),
-                1000,
-            ));
-            s.spawn(record_batch_generator(
-                osm_channels.relation_receiver.clone(),
-                record_channels.relation_sender.clone(),
-                1000,
-            ));
-        }
-
-        for i in 0..6 {
-            s.spawn(parquet_writer_func(
-                record_channels.node_receiver.clone(),
-                ParquetFilenameGenerator::new("/tmp/osm", "nodes", i + 1),
-                get_node_schema(),
-                bar.clone(),
-            ));
-            s.spawn(parquet_writer_func(
-                record_channels.way_receiver.clone(),
-                ParquetFilenameGenerator::new("/tmp/osm", "ways", i + 1),
-                get_way_schema(),
-                bar.clone(),
-            ));
-            s.spawn(parquet_writer_func(
-                record_channels.relation_receiver.clone(),
-                ParquetFilenameGenerator::new("/tmp/osm", "relations", i + 1),
-                get_relation_schema(),
-                bar.clone(),
-            ));
-        }
-        drop(osm_channels);
-        drop(record_channels);
-    });
-
-    let result = 0;
+    let r: usize = pbf
+        .par_bridge()
+        .map_init(
+            || OsmParquetWriter::new(root_path, config.clone(), config.clone(), config.clone()),
+            |writer, blob| {
+                let data = read_osm_data(&blob).unwrap();
+                if let OsmData::Primitive(block) = data {
+                    writer.write_elements(&block)
+                } else {
+                    WriteStatistics::default()
+                }
+            },
+        )
+        .map(|s| progress_bar.inc(s.total() as u64))
+        .count();
+    let result = r;
     println!("Finished processing: {:?}", result);
 }

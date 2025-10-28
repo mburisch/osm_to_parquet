@@ -6,11 +6,9 @@ use std::{
 };
 
 use crate::{
-    osm::types::OsmElement,
+    osm::types::{OsmElement, OsmInfo, OsmNode, OsmRelation, OsmRelationMember, OsmTags, OsmWay},
     osmpbf::{self, HeaderBlock, PrimitiveBlock},
 };
-
-use super::types::{OsmAttributes, OsmNode, OsmRelation, OsmRelationMember, OsmTags, OsmWay};
 
 use itertools::izip;
 
@@ -112,9 +110,9 @@ impl PrimitiveBlockDecoder {
         self.strings[index].clone()
     }
 
-    pub fn decode_info(&self, info: &Option<osmpbf::Info>) -> OsmAttributes {
+    pub fn decode_info(&self, info: &Option<osmpbf::Info>) -> OsmInfo {
         match info {
-            Some(info) => OsmAttributes {
+            Some(info) => OsmInfo {
                 version: info.version.unwrap_or(-1),
                 timestamp: info.timestamp.unwrap_or(0),
                 changeset: info.changeset.unwrap_or(-1),
@@ -124,7 +122,7 @@ impl PrimitiveBlockDecoder {
                     |index| self.decode_string(index as usize),
                 ),
             },
-            None => OsmAttributes::default(),
+            None => OsmInfo::default(),
         }
     }
 
@@ -161,14 +159,14 @@ impl PrimitiveBlockDecoder {
     pub fn decode_node(&self, node: &osmpbf::Node) -> Arc<OsmNode> {
         Arc::new(OsmNode {
             id: node.id,
-            attributes: self.decode_info(&node.info),
+            info: self.decode_info(&node.info),
             tags: self.decode_tags(&node.keys, &node.vals),
             latitude: self.decoder.latitude(node.lat),
             longitude: self.decoder.longitude(node.lon),
         })
     }
 
-    fn decode_dense_info(&self, info: &osmpbf::DenseInfo) -> impl Iterator<Item = OsmAttributes> {
+    fn decode_dense_info(&self, info: &osmpbf::DenseInfo) -> impl Iterator<Item = OsmInfo> {
         izip!(
             info.version.iter().copied().delta_decode(),
             info.timestamp.iter().copied().delta_decode(),
@@ -176,21 +174,19 @@ impl PrimitiveBlockDecoder {
             info.uid.iter().copied().delta_decode(),
             info.user_sid.iter().copied().delta_decode()
         )
-        .map(
-            |(version, timestamp, changeset, uid, user_sid)| OsmAttributes {
-                version: version,
-                timestamp: self.decoder.timestamp(timestamp),
-                changeset: changeset,
-                uid: uid as i64,
-                user_sid: self.decode_string(user_sid as usize),
-            },
-        )
+        .map(|(version, timestamp, changeset, uid, user_sid)| OsmInfo {
+            version: version,
+            timestamp: self.decoder.timestamp(timestamp),
+            changeset: changeset,
+            uid: uid as i64,
+            user_sid: self.decode_string(user_sid as usize),
+        })
     }
 
     pub fn decode_dense_nodes(&self, nodes: &osmpbf::DenseNodes) -> Vec<Arc<OsmNode>> {
         let dense_info = match &nodes.denseinfo {
             Some(info) => self.decode_dense_info(info).collect(),
-            None => vec![OsmAttributes::default(); nodes.id.len()],
+            None => vec![OsmInfo::default(); nodes.id.len()],
         };
         let count = nodes.id.len();
         izip!(
@@ -200,10 +196,10 @@ impl PrimitiveBlockDecoder {
             self.decode_dense_tags(&nodes.keys_vals, count),
             dense_info
         )
-        .map(|(id, lat, lon, tags, attributes)| {
+        .map(|(id, lat, lon, tags, info)| {
             Arc::new(OsmNode {
                 id: id,
-                attributes: attributes,
+                info: info,
                 tags: tags,
                 latitude: self.decoder.latitude(lat),
                 longitude: self.decoder.longitude(lon),
@@ -215,7 +211,7 @@ impl PrimitiveBlockDecoder {
     pub fn decode_way(&self, way: &osmpbf::Way) -> Arc<OsmWay> {
         Arc::new(OsmWay {
             id: way.id,
-            attributes: self.decode_info(&way.info),
+            info: self.decode_info(&way.info),
             tags: self.decode_tags(&way.keys, &way.vals),
             nodes: way.refs.iter().copied().delta_decode().collect(),
         })
@@ -254,7 +250,7 @@ impl PrimitiveBlockDecoder {
     pub fn decode_relation(&self, relation: &osmpbf::Relation) -> Arc<OsmRelation> {
         Arc::new(OsmRelation {
             id: relation.id,
-            attributes: self.decode_info(&relation.info),
+            info: self.decode_info(&relation.info),
             tags: self.decode_tags(&relation.keys, &relation.vals),
             members: self.decode_relation_members(
                 &relation.roles_sid,
@@ -287,4 +283,50 @@ pub fn decode_primitive_block(block: &osmpbf::PrimitiveBlock) -> Vec<OsmElement>
         }
     }
     elements
+}
+
+pub fn decode_nodes(
+    block: &osmpbf::PrimitiveBlock,
+    decoder: &PrimitiveBlockDecoder,
+) -> Vec<Arc<OsmNode>> {
+    let mut nodes = Vec::with_capacity(10_000);
+    for group in block.primitivegroup.iter() {
+        for node in group.nodes.iter() {
+            let data = decoder.decode_node(&node);
+            nodes.push(data);
+        }
+        if let Some(dense) = &group.dense {
+            let data = decoder.decode_dense_nodes(&dense);
+            nodes.extend(data);
+        }
+    }
+    nodes
+}
+
+pub fn decode_ways(
+    block: &osmpbf::PrimitiveBlock,
+    decoder: &PrimitiveBlockDecoder,
+) -> Vec<Arc<OsmWay>> {
+    let mut ways = Vec::with_capacity(10_000);
+    for group in block.primitivegroup.iter() {
+        for way in group.ways.iter() {
+            let data = decoder.decode_way(&way);
+            ways.push(data);
+        }
+    }
+    ways
+}
+
+pub fn decode_relations(
+    block: &osmpbf::PrimitiveBlock,
+    decoder: &PrimitiveBlockDecoder,
+) -> Vec<Arc<OsmRelation>> {
+    let mut relations = Vec::with_capacity(10_000);
+    for group in block.primitivegroup.iter() {
+        for relation in group.relations.iter() {
+            let data = decoder.decode_relation(&relation);
+            relations.push(data);
+        }
+    }
+    relations
 }

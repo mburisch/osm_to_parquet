@@ -4,16 +4,6 @@ use arrow::datatypes::{DataType, Field, Schema};
 
 use crate::osm::types::{OsmNode, OsmRelation, OsmWay};
 
-fn get_attribute_fields() -> Vec<Field> {
-    vec![
-        Field::new("version", DataType::Int32, true),
-        Field::new("timestamp", DataType::Int64, true),
-        Field::new("changeset", DataType::Int64, true),
-        Field::new("uid", DataType::Int64, true),
-        Field::new("user_sid", DataType::Utf8, true),
-    ]
-}
-
 fn get_tags_field() -> Field {
     Field::new_map(
         "tags",
@@ -38,33 +28,45 @@ fn get_relation_member_field() -> Field {
 }
 
 pub fn create_node_schema() -> Arc<Schema> {
-    let mut fields = vec![
+    let fields = vec![
         Field::new("id", DataType::Int64, false),
+        Field::new("version", DataType::Int32, true),
         get_tags_field(),
         Field::new("latitude", DataType::Float64, false),
         Field::new("longitude", DataType::Float64, false),
+        Field::new("timestamp", DataType::Int64, true),
+        Field::new("changeset", DataType::Int64, true),
+        Field::new("uid", DataType::Int64, true),
+        Field::new("user_sid", DataType::Utf8, true),
     ];
-    fields.extend(get_attribute_fields());
     Arc::new(Schema::new(fields))
 }
 
 pub fn create_way_schema() -> Arc<Schema> {
-    let mut fields = vec![
+    let fields = vec![
         Field::new("id", DataType::Int64, false),
+        Field::new("version", DataType::Int32, true),
         get_tags_field(),
         Field::new_list("nodes", Field::new_list_field(DataType::Int64, true), true),
+        Field::new("timestamp", DataType::Int64, true),
+        Field::new("changeset", DataType::Int64, true),
+        Field::new("uid", DataType::Int64, true),
+        Field::new("user_sid", DataType::Utf8, true),
     ];
-    fields.extend(get_attribute_fields());
     Arc::new(Schema::new(fields))
 }
 
 pub fn create_relation_schema() -> Arc<Schema> {
-    let mut fields = vec![
+    let fields = vec![
         Field::new("id", DataType::Int64, false),
+        Field::new("version", DataType::Int32, true),
         get_tags_field(),
         Field::new_list("members", get_relation_member_field(), true),
+        Field::new("timestamp", DataType::Int64, true),
+        Field::new("changeset", DataType::Int64, true),
+        Field::new("uid", DataType::Int64, true),
+        Field::new("user_sid", DataType::Utf8, true),
     ];
-    fields.extend(get_attribute_fields());
     Arc::new(Schema::new(fields))
 }
 

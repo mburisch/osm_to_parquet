@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::{
-    osm::types::{OsmAttributes, OsmNode, OsmRelation, OsmRelationMember, OsmTags, OsmWay},
+    osm::types::{OsmInfo, OsmNode, OsmRelation, OsmRelationMember, OsmTags, OsmWay},
     parquet::schemas::{get_node_schema, get_relation_schema, get_way_schema},
 };
 use arrow::{
@@ -12,7 +12,7 @@ use arrow::{
     datatypes::{DataType, Field, Schema},
 };
 
-struct AttributeBuilder {
+struct InfoBuilder {
     version: Int32Builder,
     timestamp: Int64Builder,
     changeset: Int64Builder,
@@ -20,31 +20,7 @@ struct AttributeBuilder {
     user_sid: StringBuilder,
 }
 
-fn append_optional_i32(builder: &mut Int32Builder, value: i32) {
-    if value == 0 {
-        builder.append_null();
-    } else {
-        builder.append_value(value);
-    }
-}
-
-fn append_optional_i64(builder: &mut Int64Builder, value: i64) {
-    if value == 0 {
-        builder.append_null();
-    } else {
-        builder.append_value(value);
-    }
-}
-
-fn append_optional_str(builder: &mut StringBuilder, value: &str) {
-    if value.len() == 0 {
-        builder.append_null();
-    } else {
-        builder.append_value(value);
-    }
-}
-
-impl AttributeBuilder {
+impl InfoBuilder {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             version: Int32Builder::with_capacity(capacity),
@@ -55,22 +31,36 @@ impl AttributeBuilder {
         }
     }
 
-    pub fn append(&mut self, attribute: &OsmAttributes) {
-        append_optional_i32(&mut self.version, attribute.version);
-        append_optional_i64(&mut self.timestamp, attribute.timestamp);
-        append_optional_i64(&mut self.changeset, attribute.changeset);
-        append_optional_i64(&mut self.uid, attribute.uid);
-        append_optional_str(&mut self.user_sid, &attribute.user_sid);
+    pub fn append(&mut self, info: &OsmInfo) {
+        InfoBuilder::append_optional_i32(&mut self.version, info.version);
+        InfoBuilder::append_optional_i64(&mut self.timestamp, info.timestamp);
+        InfoBuilder::append_optional_i64(&mut self.changeset, info.changeset);
+        InfoBuilder::append_optional_i64(&mut self.uid, info.uid);
+        InfoBuilder::append_optional_str(&mut self.user_sid, &info.user_sid);
     }
 
-    pub fn finish(&mut self) -> Vec<ArrayRef> {
-        vec![
-            Arc::new(self.version.finish()) as ArrayRef,
-            Arc::new(self.timestamp.finish()) as ArrayRef,
-            Arc::new(self.changeset.finish()) as ArrayRef,
-            Arc::new(self.uid.finish()) as ArrayRef,
-            Arc::new(self.user_sid.finish()) as ArrayRef,
-        ]
+    fn append_optional_i32(builder: &mut Int32Builder, value: i32) {
+        if value == 0 {
+            builder.append_null();
+        } else {
+            builder.append_value(value);
+        }
+    }
+
+    fn append_optional_i64(builder: &mut Int64Builder, value: i64) {
+        if value == 0 {
+            builder.append_null();
+        } else {
+            builder.append_value(value);
+        }
+    }
+
+    fn append_optional_str(builder: &mut StringBuilder, value: &str) {
+        if value.len() == 0 {
+            builder.append_null();
+        } else {
+            builder.append_value(value);
+        }
     }
 }
 
@@ -150,24 +140,27 @@ pub fn convert_nodes(nodes: &[Arc<OsmNode>], schema: Arc<Schema>) -> RecordBatch
     let mut tags = TagsBuilder::with_capacity(nodes.len());
     let mut latitude = Float64Builder::with_capacity(nodes.len());
     let mut longitude = Float64Builder::with_capacity(nodes.len());
-    let mut attributes = AttributeBuilder::with_capacity(nodes.len());
+    let mut info = InfoBuilder::with_capacity(nodes.len());
 
     for node in nodes {
         id.append_value(node.id);
         tags.append(&node.tags);
         latitude.append_value(node.latitude);
         longitude.append_value(node.longitude);
-        attributes.append(&node.attributes);
+        info.append(&node.info);
     }
 
-    let mut columns = vec![
+    let columns = vec![
         Arc::new(id.finish()) as ArrayRef,
+        Arc::new(info.version.finish()) as ArrayRef,
         Arc::new(tags.finish()) as ArrayRef,
         Arc::new(latitude.finish()) as ArrayRef,
         Arc::new(longitude.finish()) as ArrayRef,
+        Arc::new(info.timestamp.finish()) as ArrayRef,
+        Arc::new(info.changeset.finish()) as ArrayRef,
+        Arc::new(info.uid.finish()) as ArrayRef,
+        Arc::new(info.user_sid.finish()) as ArrayRef,
     ];
-    columns.extend(attributes.finish());
-
     RecordBatch::try_new(schema, columns).unwrap()
 }
 
@@ -175,7 +168,7 @@ pub fn convert_ways(ways: &[Arc<OsmWay>], schema: Arc<Schema>) -> RecordBatch {
     let mut id = Int64Builder::with_capacity(ways.len());
     let mut tags = TagsBuilder::with_capacity(ways.len());
     let mut nodes = ListBuilder::with_capacity(Int64Builder::new(), ways.len());
-    let mut attributes = AttributeBuilder::with_capacity(ways.len());
+    let mut info = InfoBuilder::with_capacity(ways.len());
 
     for way in ways {
         id.append_value(way.id);
@@ -184,16 +177,19 @@ pub fn convert_ways(ways: &[Arc<OsmWay>], schema: Arc<Schema>) -> RecordBatch {
             nodes.values().append_value(*node);
         }
         nodes.append(true);
-        attributes.append(&way.attributes);
+        info.append(&way.info);
     }
 
-    let mut columns = vec![
+    let columns = vec![
         Arc::new(id.finish()) as ArrayRef,
+        Arc::new(info.version.finish()) as ArrayRef,
         Arc::new(tags.finish()) as ArrayRef,
         Arc::new(nodes.finish()) as ArrayRef,
+        Arc::new(info.timestamp.finish()) as ArrayRef,
+        Arc::new(info.changeset.finish()) as ArrayRef,
+        Arc::new(info.uid.finish()) as ArrayRef,
+        Arc::new(info.user_sid.finish()) as ArrayRef,
     ];
-    columns.extend(attributes.finish());
-
     RecordBatch::try_new(schema, columns).unwrap()
 }
 
@@ -201,22 +197,25 @@ pub fn convert_relations(relations: &[Arc<OsmRelation>], schema: Arc<Schema>) ->
     let mut id = Int64Builder::with_capacity(relations.len());
     let mut tags = TagsBuilder::with_capacity(relations.len());
     let mut members = RelationMembersBuilder::with_capacity(relations.len());
-    let mut attributes = AttributeBuilder::with_capacity(relations.len());
+    let mut info = InfoBuilder::with_capacity(relations.len());
 
     for relation in relations {
         id.append_value(relation.id);
         tags.append(&relation.tags);
         members.append(&relation.members);
-        attributes.append(&relation.attributes);
+        info.append(&relation.info);
     }
 
-    let mut columns = vec![
+    let columns = vec![
         Arc::new(id.finish()) as ArrayRef,
+        Arc::new(info.version.finish()) as ArrayRef,
         Arc::new(tags.finish()) as ArrayRef,
         Arc::new(members.finish()) as ArrayRef,
+        Arc::new(info.timestamp.finish()) as ArrayRef,
+        Arc::new(info.changeset.finish()) as ArrayRef,
+        Arc::new(info.uid.finish()) as ArrayRef,
+        Arc::new(info.user_sid.finish()) as ArrayRef,
     ];
-    columns.extend(attributes.finish());
-
     RecordBatch::try_new(schema, columns).unwrap()
 }
 

@@ -11,11 +11,11 @@ import pyarrow.parquet as pq
 from more_itertools import batched
 from tqdm import tqdm
 
-from osmpq.arrow import ARROW_BLOB_SCHEMA
-from osmpq.arrow import ParquetBatchWriter
-from osmpq.arrow import WriterConfig
 from osmpq.osm.blob import BlobData
 from osmpq.osm.blob import read_blobs
+from osmpq.parquet import ARROW_BLOB_SCHEMA
+from osmpq.parquet import ParquetBatchWriter
+from osmpq.parquet import WriterConfig
 
 
 def read_blob_data(filename: str) -> Iterable[BlobData]:
@@ -55,5 +55,5 @@ def write_records(path: str, records: Iterable[pa.RecordBatch], config: WriterCo
 def pbf_to_blobs(pbf_filename: str, output_path: str, writer_config: WriterConfig) -> None:
     blobs = read_blob_data(pbf_filename)
     blobs = tqdm(blobs, desc="Reading blobs", unit_scale=True)
-    records = to_record_batches(blobs, writer_config.max_rows_per_group)
+    records = to_record_batches(blobs, writer_config.max_row_group_size)
     write_records(output_path, records, writer_config)

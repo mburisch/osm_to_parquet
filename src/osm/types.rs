@@ -3,7 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 pub type OsmTags = HashMap<Arc<String>, Arc<String>>;
 
 #[derive(Debug, Clone, Default)]
-pub struct OsmAttributes {
+pub struct OsmInfo {
     pub version: i32,
     pub timestamp: i64,
     pub changeset: i64,
@@ -14,7 +14,7 @@ pub struct OsmAttributes {
 #[derive(Debug, Default)]
 pub struct OsmNode {
     pub id: i64,
-    pub attributes: OsmAttributes,
+    pub info: OsmInfo,
     pub tags: OsmTags,
     pub latitude: f64,
     pub longitude: f64,
@@ -23,7 +23,7 @@ pub struct OsmNode {
 #[derive(Debug, Default)]
 pub struct OsmWay {
     pub id: i64,
-    pub attributes: OsmAttributes,
+    pub info: OsmInfo,
     pub tags: OsmTags,
     pub nodes: Vec<i64>,
 }
@@ -38,7 +38,7 @@ pub struct OsmRelationMember {
 #[derive(Debug)]
 pub struct OsmRelation {
     pub id: i64,
-    pub attributes: OsmAttributes,
+    pub info: OsmInfo,
     pub tags: OsmTags,
     pub members: Vec<OsmRelationMember>,
 }

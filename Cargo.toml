@@ -25,6 +25,7 @@ object_store = { version = "0.12.4", features = ["aws", "http"] }
 parquet = "56.2.0"
 prost = "0.14.1"
 prost-build = "0.13.5"
+rayon = "1.11.0"
 url = "2.5.7"
 zstd = "0.13.3"
 

@@ -4,8 +4,8 @@ import argparse
 
 from pyspark.sql import SparkSession
 
-from osmpq.arrow import WriterConfig
 from osmpq.element_converter import blobs_to_elements
+from osmpq.parquet import WriterConfig
 
 
 def create_parser() -> argparse.ArgumentParser:

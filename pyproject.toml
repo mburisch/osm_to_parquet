@@ -1,13 +1,13 @@
 [project]
 name = "osm-to-parquet"
 version = "0.1.0"
-description = "Add your description here"
+description = "Convert OSM PBF files to Parquet format"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "fsspec[s3]>=2025.9.0",
     "more-itertools>=10.7.0",
-    "protobuf>=6.31.1",
+    "protobuf>=6",
     "pyarrow>=20.0.0",
     "pyspark>=4.0.0",
     "tqdm>=4.67.1",
