@@ -4,4 +4,4 @@ pub mod osmpbf {
 
 pub mod osm;
 pub mod parquet;
-pub mod pipeline;
+pub mod progress;

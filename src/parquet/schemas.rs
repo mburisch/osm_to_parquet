@@ -2,8 +2,6 @@ use std::sync::{Arc, OnceLock};
 
 use arrow::datatypes::{DataType, Field, Schema};
 
-use crate::osm::types::{OsmNode, OsmRelation, OsmWay};
-
 fn get_tags_field() -> Field {
     Field::new_map(
         "tags",
@@ -86,26 +84,4 @@ pub fn get_relation_schema() -> Arc<Schema> {
     static SCHEMA: OnceLock<Arc<Schema>> = OnceLock::new();
     let s = SCHEMA.get_or_init(|| create_relation_schema());
     s.clone()
-}
-
-pub trait ParquetSchema {
-    fn get_schema() -> Arc<Schema>;
-}
-
-impl ParquetSchema for OsmNode {
-    fn get_schema() -> Arc<Schema> {
-        crate::parquet::schemas::get_node_schema()
-    }
-}
-
-impl ParquetSchema for OsmWay {
-    fn get_schema() -> Arc<Schema> {
-        crate::parquet::schemas::get_way_schema()
-    }
-}
-
-impl ParquetSchema for OsmRelation {
-    fn get_schema() -> Arc<Schema> {
-        crate::parquet::schemas::get_relation_schema()
-    }
 }

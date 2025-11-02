@@ -38,7 +38,7 @@ impl<Source: Read> PbfReader<Source> {
 }
 
 impl PbfReader<BufReader<File>> {
-    pub fn with_filename(filename: &str) -> Result<Self> {
+    pub fn for_local_file(filename: &str) -> Result<Self> {
         let f = File::open(filename)?;
         let b = BufReader::with_capacity(8 * 1024 * 1024, f);
         Ok(Self::new(b))

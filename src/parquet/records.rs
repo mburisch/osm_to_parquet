@@ -1,7 +1,10 @@
 use std::sync::Arc;
 
 use crate::{
-    osm::types::{OsmInfo, OsmNode, OsmRelation, OsmRelationMember, OsmTags, OsmWay},
+    osm::types::{
+        ElementCount, OsmElements, OsmInfo, OsmNode, OsmRelation, OsmRelationMember, OsmTags,
+        OsmWay,
+    },
     parquet::schemas::{get_node_schema, get_relation_schema, get_way_schema},
 };
 use arrow::{
@@ -135,7 +138,11 @@ impl RelationMembersBuilder {
     }
 }
 
-pub fn convert_nodes(nodes: &[Arc<OsmNode>], schema: Arc<Schema>) -> RecordBatch {
+pub fn create_batch_for_nodes(nodes: &[Arc<OsmNode>], schema: Arc<Schema>) -> Option<RecordBatch> {
+    if nodes.is_empty() {
+        return None;
+    }
+
     let mut id = Int64Builder::with_capacity(nodes.len());
     let mut tags = TagsBuilder::with_capacity(nodes.len());
     let mut latitude = Float64Builder::with_capacity(nodes.len());
@@ -161,10 +168,14 @@ pub fn convert_nodes(nodes: &[Arc<OsmNode>], schema: Arc<Schema>) -> RecordBatch
         Arc::new(info.uid.finish()) as ArrayRef,
         Arc::new(info.user_sid.finish()) as ArrayRef,
     ];
-    RecordBatch::try_new(schema, columns).unwrap()
+    Some(RecordBatch::try_new(schema, columns).unwrap())
 }
 
-pub fn convert_ways(ways: &[Arc<OsmWay>], schema: Arc<Schema>) -> RecordBatch {
+pub fn create_batch_for_ways(ways: &[Arc<OsmWay>], schema: Arc<Schema>) -> Option<RecordBatch> {
+    if ways.is_empty() {
+        return None;
+    }
+
     let mut id = Int64Builder::with_capacity(ways.len());
     let mut tags = TagsBuilder::with_capacity(ways.len());
     let mut nodes = ListBuilder::with_capacity(Int64Builder::new(), ways.len());
@@ -190,10 +201,17 @@ pub fn convert_ways(ways: &[Arc<OsmWay>], schema: Arc<Schema>) -> RecordBatch {
         Arc::new(info.uid.finish()) as ArrayRef,
         Arc::new(info.user_sid.finish()) as ArrayRef,
     ];
-    RecordBatch::try_new(schema, columns).unwrap()
+    Some(RecordBatch::try_new(schema, columns).unwrap())
 }
 
-pub fn convert_relations(relations: &[Arc<OsmRelation>], schema: Arc<Schema>) -> RecordBatch {
+pub fn create_batch_for_relations(
+    relations: &[Arc<OsmRelation>],
+    schema: Arc<Schema>,
+) -> Option<RecordBatch> {
+    if relations.is_empty() {
+        return None;
+    }
+
     let mut id = Int64Builder::with_capacity(relations.len());
     let mut tags = TagsBuilder::with_capacity(relations.len());
     let mut members = RelationMembersBuilder::with_capacity(relations.len());
@@ -216,27 +234,30 @@ pub fn convert_relations(relations: &[Arc<OsmRelation>], schema: Arc<Schema>) ->
         Arc::new(info.uid.finish()) as ArrayRef,
         Arc::new(info.user_sid.finish()) as ArrayRef,
     ];
-    RecordBatch::try_new(schema, columns).unwrap()
+    Some(RecordBatch::try_new(schema, columns).unwrap())
 }
 
-pub trait RecordBatchConverter<T> {
-    fn create_record_batch(items: &[Arc<T>]) -> Arc<RecordBatch>;
+#[derive(Debug, Clone, Default)]
+pub struct ElementBatches {
+    pub nodes: Option<RecordBatch>,
+    pub ways: Option<RecordBatch>,
+    pub relations: Option<RecordBatch>,
 }
 
-impl RecordBatchConverter<OsmNode> for OsmNode {
-    fn create_record_batch(items: &[Arc<OsmNode>]) -> Arc<RecordBatch> {
-        Arc::new(convert_nodes(items, get_node_schema()))
+impl ElementBatches {
+    pub fn from_elements(elements: &OsmElements) -> Self {
+        Self {
+            nodes: create_batch_for_nodes(&elements.nodes, get_node_schema()),
+            ways: create_batch_for_ways(&elements.ways, get_way_schema()),
+            relations: create_batch_for_relations(&elements.relations, get_relation_schema()),
+        }
     }
-}
 
-impl RecordBatchConverter<OsmWay> for OsmWay {
-    fn create_record_batch(items: &[Arc<OsmWay>]) -> Arc<RecordBatch> {
-        Arc::new(convert_ways(items, get_way_schema()))
-    }
-}
-
-impl RecordBatchConverter<OsmRelation> for OsmRelation {
-    fn create_record_batch(items: &[Arc<OsmRelation>]) -> Arc<RecordBatch> {
-        Arc::new(convert_relations(items, get_relation_schema()))
+    pub fn count(&self) -> ElementCount {
+        return ElementCount {
+            nodes: self.nodes.as_ref().map_or(0, |n| n.num_rows()),
+            ways: self.ways.as_ref().map_or(0, |w| w.num_rows()),
+            relations: self.relations.as_ref().map_or(0, |r| r.num_rows()),
+        };
     }
 }

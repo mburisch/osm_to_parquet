@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, fmt, sync::Arc};
 
 pub type OsmTags = HashMap<Arc<String>, Arc<String>>;
 
@@ -43,9 +43,42 @@ pub struct OsmRelation {
     pub members: Vec<OsmRelationMember>,
 }
 
-#[derive(Debug)]
-pub enum OsmElement {
-    Node(Arc<OsmNode>),
-    Way(Arc<OsmWay>),
-    Relation(Arc<OsmRelation>),
+#[derive(Debug, Default, Clone)]
+pub struct OsmElements {
+    pub nodes: Vec<Arc<OsmNode>>,
+    pub ways: Vec<Arc<OsmWay>>,
+    pub relations: Vec<Arc<OsmRelation>>,
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ElementCount {
+    pub nodes: usize,
+    pub ways: usize,
+    pub relations: usize,
+}
+
+impl ElementCount {
+    pub fn new(nodes: usize, ways: usize, relations: usize) -> Self {
+        Self {
+            nodes,
+            ways,
+            relations,
+        }
+    }
+
+    pub fn total(&self) -> usize {
+        self.nodes + self.ways + self.relations
+    }
+}
+
+impl fmt::Display for ElementCount {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "(nodes = {} / ways = {} / relations = {})",
+            readable::num::Unsigned::from(self.nodes),
+            readable::num::Unsigned::from(self.ways),
+            readable::num::Unsigned::from(self.relations)
+        )
+    }
 }

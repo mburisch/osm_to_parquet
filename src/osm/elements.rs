@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::{
-    osm::types::{OsmElement, OsmInfo, OsmNode, OsmRelation, OsmRelationMember, OsmTags, OsmWay},
+    osm::types::{OsmElements, OsmInfo, OsmNode, OsmRelation, OsmRelationMember, OsmTags, OsmWay},
     osmpbf::{self, HeaderBlock, PrimitiveBlock},
 };
 
@@ -113,10 +113,10 @@ impl PrimitiveBlockDecoder {
     pub fn decode_info(&self, info: &Option<osmpbf::Info>) -> OsmInfo {
         match info {
             Some(info) => OsmInfo {
-                version: info.version.unwrap_or(-1),
+                version: info.version.unwrap_or(0),
                 timestamp: info.timestamp.unwrap_or(0),
-                changeset: info.changeset.unwrap_or(-1),
-                uid: info.uid.unwrap_or(-1) as i64,
+                changeset: info.changeset.unwrap_or(0),
+                uid: info.uid.unwrap_or(0) as i64,
                 user_sid: info.user_sid.map_or_else(
                     || self.decode_string(0),
                     |index| self.decode_string(index as usize),
@@ -261,30 +261,6 @@ impl PrimitiveBlockDecoder {
     }
 }
 
-pub fn decode_primitive_block(block: &osmpbf::PrimitiveBlock) -> Vec<OsmElement> {
-    let decoder = PrimitiveBlockDecoder::new(&block);
-    let mut elements = Vec::new();
-    for group in block.primitivegroup.iter() {
-        for node in group.nodes.iter() {
-            let data = decoder.decode_node(&node);
-            elements.push(OsmElement::Node(data));
-        }
-        for way in group.ways.iter() {
-            let data = decoder.decode_way(&way);
-            elements.push(OsmElement::Way(data));
-        }
-        for relation in group.relations.iter() {
-            let data = decoder.decode_relation(&relation);
-            elements.push(OsmElement::Relation(data));
-        }
-        if let Some(dense) = &group.dense {
-            let data = decoder.decode_dense_nodes(&dense);
-            elements.extend(data.into_iter().map(OsmElement::Node));
-        }
-    }
-    elements
-}
-
 pub fn decode_nodes(
     block: &osmpbf::PrimitiveBlock,
     decoder: &PrimitiveBlockDecoder,
@@ -329,4 +305,13 @@ pub fn decode_relations(
         }
     }
     relations
+}
+
+pub fn decode_primitive_block(block: &osmpbf::PrimitiveBlock) -> OsmElements {
+    let decoder = PrimitiveBlockDecoder::new(&block);
+    OsmElements {
+        nodes: decode_nodes(&block, &decoder),
+        ways: decode_ways(&block, &decoder),
+        relations: decode_relations(&block, &decoder),
+    }
 }
