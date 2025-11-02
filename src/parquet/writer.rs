@@ -25,7 +25,10 @@ pub enum ParquetData {
 
 pub fn create_writer_options() -> WriterProperties {
     let props = WriterProperties::builder();
-    props.set_compression(Compression::SNAPPY).build()
+    //props.set_compression(Compression::SNAPPY).build()
+    props
+        .set_compression(Compression::ZSTD(ZstdLevel::try_new(3).unwrap()))
+        .build()
 }
 
 pub fn create_parquet_writer<Target: Write + Send>(

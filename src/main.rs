@@ -42,7 +42,7 @@ fn main() {
         .unwrap();
 
     let parquet_pool = rayon::ThreadPoolBuilder::new()
-        .num_threads(8)
+        .num_threads(16)
         .build()
         .unwrap();
 
