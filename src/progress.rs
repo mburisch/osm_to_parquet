@@ -20,14 +20,10 @@ impl ElementsProgress {
         }
     }
 
-    pub fn inc(&self, nodes: usize, ways: usize, relations: usize) {
-        self.nodes.inc(nodes as u64);
-        self.ways.inc(ways as u64);
-        self.relations.inc(relations as u64);
-    }
-
-    pub fn inc_elements(&self, count: ElementCount) {
-        self.inc(count.nodes, count.ways, count.relations);
+    pub fn inc(&self, count: ElementCount) {
+        self.nodes.inc(count.nodes as u64);
+        self.ways.inc(count.ways as u64);
+        self.relations.inc(count.relations as u64);
     }
 
     pub fn finish(&self) {
@@ -106,21 +102,5 @@ impl Progress {
         bar.enable_steady_tick(time::Duration::from_millis(100));
         bar.set_message(name.to_string());
         bar
-    }
-
-    pub fn inc_pbf(&self, count: usize) {
-        self.pbf.inc(count as u64);
-    }
-
-    pub fn inc_elements(&self, count: ElementCount) {
-        self.elements.inc_elements(count);
-    }
-
-    pub fn inc_files(&self, count: usize) {
-        self.files.inc(count as u64);
-    }
-
-    pub fn inc_bytes(&self, count: usize) {
-        self.bytes.inc(count as u64);
     }
 }

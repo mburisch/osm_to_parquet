@@ -14,7 +14,7 @@ use parquet::{
     file::properties::WriterProperties,
 };
 
-use crate::parquet::records::ElementBatches;
+use crate::parquet::records::Elements;
 
 #[derive(Debug)]
 pub enum ParquetData {
@@ -181,7 +181,7 @@ impl OsmParquetStreamWriter {
         }
     }
 
-    pub fn write(&mut self, elements: &ElementBatches) -> Result<()> {
+    pub fn write(&mut self, elements: &Elements) -> Result<()> {
         if let Some(nodes) = elements.nodes.as_ref() {
             self.nodes.write(nodes)?;
         }

@@ -1,154 +1,89 @@
+use clap::Parser;
 use crossbeam_channel::bounded;
-use osm_to_parquet::osm::elements::decode_primitive_block;
-use osm_to_parquet::osm::{blobs::read_osm_data, elements::OsmData, pbf::PbfReader};
-use osm_to_parquet::parquet::records::ElementBatches;
-use osm_to_parquet::parquet::schemas::{get_node_schema, get_relation_schema, get_way_schema};
-use osm_to_parquet::parquet::writer::{
-    OsmParquetStreamWriter, ParquetData, ParquetMemoryStreamWriter,
-};
+use osm_to_parquet::io::LocalFileWriter;
+use osm_to_parquet::osm::pbf::PbfReader;
+use osm_to_parquet::processor::{generate_blobs, generate_parquet, process_blobs, write_files};
 use osm_to_parquet::progress::Progress;
-use rayon;
-use rayon::prelude::*;
-use readable;
-use readable::num;
-use std::fs;
 use std::path::Path;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::thread;
 
-fn main() {
-    //let filename = "/data/osm/nevada-latest.osm.pbf";
-    let filename = "/data/osm/us-latest.osm.pbf";
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+    /// PBF filename
+    #[arg(long)]
+    pbf_filename: String,
+
+    /// Output directory
+    #[arg(long)]
+    output_path: String,
+
+    /// Number of threads for blob decoding
+    #[arg(long)]
+    blob_threads: Option<usize>,
+
+    /// Number of threads for Parquet encoding
+    #[arg(long)]
+    parquet_threads: Option<usize>,
+
+    /// Number of threads for writing files
+    #[arg(long)]
+    writer_threads: Option<usize>,
+}
+
+#[tokio::main]
+async fn main() {
+    //let args = Args::parse();
+
+    let filename = "/data/osm/nevada-latest.osm.pbf";
+    //let filename = "/data/osm/us-latest.osm.pbf";
     println!("Processing {}", filename);
     let pbf = PbfReader::for_local_file(filename).unwrap();
 
     let progress = Progress::new();
 
     let root_path = Path::new("/tmp/osm");
-    if root_path.exists() {
-        fs::remove_dir_all(root_path).unwrap();
-    }
-    fs::create_dir_all(root_path).unwrap();
-    fs::create_dir_all(root_path.join("nodes")).unwrap();
-    fs::create_dir_all(root_path.join("ways")).unwrap();
-    fs::create_dir_all(root_path.join("relations")).unwrap();
+    let writer = LocalFileWriter::new(root_path.to_path_buf());
+    writer.clear();
 
+    let (pbf_sender, pbf_receiver) = bounded(100);
     let (elements_sender, elements_receiver) = bounded(100);
     let (data_sender, data_receiver) = bounded(10);
 
-    let pbf_pool = rayon::ThreadPoolBuilder::new()
-        .num_threads(8)
-        .build()
-        .unwrap();
+    let blob_threads = 8;
+    let parquet_threads = 16;
+    let writer_threads = 2;
 
-    let parquet_pool = rayon::ThreadPoolBuilder::new()
-        .num_threads(16)
-        .build()
-        .unwrap();
-
-    let write_pool = rayon::ThreadPoolBuilder::new()
-        .num_threads(2)
-        .build()
-        .unwrap();
-
-    pbf_pool.scope(|s| {
+    thread::scope(|s| {
         {
-            let progress = progress.clone();
-            s.spawn(move |_| {
-                pbf.into_iter().par_bridge().for_each(|blob| {
-                    progress.inc_pbf(1);
-                    let data = read_osm_data(&blob).unwrap();
-
-                    match data {
-                        OsmData::Primitive(block) => {
-                            let elements =
-                                ElementBatches::from_elements(&decode_primitive_block(&block));
-                            progress.inc_elements(elements.count());
-                            elements_sender.send(Arc::new(elements)).unwrap();
-                        }
-                        _ => {}
-                    }
-                });
-                progress.pbf.finish();
-                progress.elements.finish();
-            });
+            let progress = progress.pbf.clone();
+            s.spawn(move || generate_blobs(pbf, pbf_sender, progress));
         }
 
-        parquet_pool.scope(|s| {
-            for _ in 0..parquet_pool.current_num_threads() {
-                let progress = progress.clone();
-                let elements_receiver = elements_receiver.clone();
-                let data_sender = data_sender.clone();
-                s.spawn(move |_| {
-                    let mut writer = OsmParquetStreamWriter::new(
-                        Box::new(ParquetMemoryStreamWriter::new(
-                            get_node_schema(),
-                            None,
-                            None,
-                        )),
-                        Box::new(ParquetMemoryStreamWriter::new(get_way_schema(), None, None)),
-                        Box::new(ParquetMemoryStreamWriter::new(
-                            get_relation_schema(),
-                            None,
-                            None,
-                        )),
-                    );
-                    for elements in elements_receiver.iter() {
-                        writer.write(&elements).unwrap();
+        for _ in 0..blob_threads {
+            let pbf_receiver = pbf_receiver.clone();
+            let elements_sender = elements_sender.clone();
+            let progress = progress.elements.clone();
+            s.spawn(move || process_blobs(pbf_receiver, elements_sender, progress));
+        }
+        drop(pbf_receiver);
+        drop(elements_sender);
 
-                        for data in writer.flush(false).unwrap() {
-                            progress.inc_files(1);
-                            data_sender.send(data).unwrap();
-                        }
-                    }
-                    for data in writer.flush(true).unwrap() {
-                        progress.inc_files(1);
-                        data_sender.send(data).unwrap();
-                    }
-                    progress.files.finish();
-                });
-            }
-            drop(data_sender);
+        for _ in 0..parquet_threads {
+            let elements_receiver = elements_receiver.clone();
+            let data_sender = data_sender.clone();
+            let progress = progress.files.clone();
+            s.spawn(move || generate_parquet(elements_receiver, data_sender, progress));
+        }
+        drop(elements_receiver);
+        drop(data_sender);
 
-            write_pool.scope(|s| {
-                for _ in 0..write_pool.current_num_threads() {
-                    let nodes_index = Arc::new(AtomicUsize::new(1));
-                    let ways_index = Arc::new(AtomicUsize::new(1));
-                    let relations_index = Arc::new(AtomicUsize::new(1));
-                    let progress = progress.clone();
-                    let data_receiver = data_receiver.clone();
-                    s.spawn(move |_s| {
-                        for data in data_receiver.iter() {
-                            match data {
-                                ParquetData::Node(data) => {
-                                    let nodes_index = nodes_index.fetch_add(1, Ordering::Relaxed);
-                                    let filename = root_path
-                                        .join(format!("nodes/nodes_{nodes_index:06}.parquet"));
-                                    progress.inc_bytes(data.len());
-                                    fs::write(filename, data).unwrap();
-                                }
-                                ParquetData::Way(data) => {
-                                    let ways_index = ways_index.fetch_add(1, Ordering::Relaxed);
-                                    let filename = root_path
-                                        .join(format!("ways/ways_{ways_index:06}.parquet"));
-                                    progress.inc_bytes(data.len());
-                                    fs::write(filename, data).unwrap();
-                                }
-                                ParquetData::Relation(data) => {
-                                    let relations_index =
-                                        relations_index.fetch_add(1, Ordering::Relaxed);
-                                    let filename = root_path.join(format!(
-                                        "relations/relations_{relations_index:06}.parquet"
-                                    ));
-                                    progress.inc_bytes(data.len());
-                                    fs::write(filename, data).unwrap();
-                                }
-                            }
-                        }
-                        progress.bytes.finish();
-                    });
-                }
-            })
-        });
+        for _ in 0..writer_threads {
+            let data_receiver = data_receiver.clone();
+            let writer = writer.clone();
+            let progress = progress.bytes.clone();
+            s.spawn(move || write_files(data_receiver, writer, progress));
+        }
+        drop(data_receiver);
     });
 }

@@ -238,13 +238,13 @@ pub fn create_batch_for_relations(
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct ElementBatches {
+pub struct Elements {
     pub nodes: Option<RecordBatch>,
     pub ways: Option<RecordBatch>,
     pub relations: Option<RecordBatch>,
 }
 
-impl ElementBatches {
+impl Elements {
     pub fn from_elements(elements: &OsmElements) -> Self {
         Self {
             nodes: create_batch_for_nodes(&elements.nodes, get_node_schema()),
