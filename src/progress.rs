@@ -4,81 +4,72 @@ use indicatif::{MultiProgress, ProgressBar, ProgressFinish, ProgressStyle};
 
 use crate::osm::types::ElementCount;
 
+pub trait Progress
+where
+    Self: Clone + Send,
+{
+    fn inc_read_bytes(&self, bytes: u64);
+    fn inc_pbf_blobs(&self, bytes: u64);
+    fn inc_elements(&self, nodes: u64, ways: u64, relations: u64);
+    fn inc_files(&self, files: u64);
+    fn inc_write_bytes(&self, bytes: u64);
+}
+
 #[derive(Debug, Clone)]
-pub struct ElementsProgress {
+pub struct ConsoleProgress {
+    pub bar: MultiProgress,
+    pub read: ProgressBar,
+    pub pbf: ProgressBar,
     pub nodes: ProgressBar,
     pub ways: ProgressBar,
     pub relations: ProgressBar,
-}
-
-impl ElementsProgress {
-    pub fn new(nodes: ProgressBar, ways: ProgressBar, relations: ProgressBar) -> Self {
-        Self {
-            nodes,
-            ways,
-            relations,
-        }
-    }
-
-    pub fn inc(&self, count: ElementCount) {
-        self.nodes.inc(count.nodes as u64);
-        self.ways.inc(count.ways as u64);
-        self.relations.inc(count.relations as u64);
-    }
-
-    pub fn finish(&self) {
-        self.nodes.finish();
-        self.ways.finish();
-        self.relations.finish();
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Progress {
-    pub bar: MultiProgress,
-    pub pbf: ProgressBar,
-    pub elements: ElementsProgress,
     pub files: ProgressBar,
-    pub bytes: ProgressBar,
+    pub write: ProgressBar,
 }
 
-impl Progress {
+impl ConsoleProgress {
     pub fn new() -> Self {
         let bar = MultiProgress::new();
+        let read = bar.add(Self::create_read_bar());
         let pbf = bar.add(Self::create_pbf_bar());
-        let el = Self::create_elements_bar();
-        let elements =
-            ElementsProgress::new(bar.add(el.nodes), bar.add(el.ways), bar.add(el.relations));
+        let nodes = bar.add(Self::create_elements_bar("Nodes"));
+        let ways = bar.add(Self::create_elements_bar("Ways"));
+        let relations = bar.add(Self::create_elements_bar("Relations"));
         let files = bar.add(Self::create_files_bar());
-        let bytes = bar.add(Self::create_bytes_bar());
+        let write = bar.add(Self::create_write_bar());
 
         Self {
             bar,
+            read,
             pbf,
-            elements,
+            nodes,
+            ways,
+            relations,
             files,
-            bytes,
+            write,
         }
     }
 
-    fn create_pbf_bar() -> ProgressBar {
+    fn create_read_bar() -> ProgressBar {
         let style = ProgressStyle::with_template(
-            "{msg:10} {spinner:.green}  [{elapsed:6}] [{human_len} {per_sec}]",
+            "{msg:10} {spinner:.green}  [{elapsed:6}] [{binary_total_bytes} / {binary_bytes_per_sec}]",
         )
         .unwrap();
-        Self::create_bar("PBF", style)
+        Self::create_bar("Read", style)
     }
 
-    fn create_elements_bar() -> ElementsProgress {
+    fn create_pbf_bar() -> ProgressBar {
         let style =
             ProgressStyle::with_template("{msg:10} {spinner:.green}  [{elapsed:6}] [{human_len}]")
                 .unwrap();
+        Self::create_bar("PBF", style)
+    }
 
-        ElementsProgress::new(
-            Self::create_bar("Nodes", style.clone()),
-            Self::create_bar("Ways", style.clone()),
-            Self::create_bar("Relations", style.clone()),
-        )
+    fn create_elements_bar(name: &str) -> ProgressBar {
+        let style =
+            ProgressStyle::with_template("{msg:10} {spinner:.green}  [{elapsed:6}] [{human_len}]")
+                .unwrap();
+        Self::create_bar(name, style)
     }
 
     fn create_files_bar() -> ProgressBar {
@@ -88,12 +79,12 @@ impl Progress {
         Self::create_bar("Files", style)
     }
 
-    fn create_bytes_bar() -> ProgressBar {
+    fn create_write_bar() -> ProgressBar {
         let style = ProgressStyle::with_template(
             "{msg:10} {spinner:.green}  [{elapsed:6}] [{binary_total_bytes} / {binary_bytes_per_sec}]",
         )
         .unwrap();
-        Self::create_bar("Bytes", style)
+        Self::create_bar("Write", style)
     }
 
     fn create_bar(name: &str, style: ProgressStyle) -> ProgressBar {
@@ -102,5 +93,29 @@ impl Progress {
         bar.enable_steady_tick(time::Duration::from_millis(100));
         bar.set_message(name.to_string());
         bar
+    }
+}
+
+impl Progress for ConsoleProgress {
+    fn inc_read_bytes(&self, bytes: u64) {
+        self.read.inc(bytes);
+    }
+
+    fn inc_pbf_blobs(&self, bytes: u64) {
+        self.pbf.inc(bytes);
+    }
+
+    fn inc_elements(&self, nodes: u64, ways: u64, relations: u64) {
+        self.nodes.inc(nodes);
+        self.ways.inc(ways);
+        self.relations.inc(relations);
+    }
+
+    fn inc_files(&self, files: u64) {
+        self.files.inc(files);
+    }
+
+    fn inc_write_bytes(&self, bytes: u64) {
+        self.write.inc(bytes);
     }
 }

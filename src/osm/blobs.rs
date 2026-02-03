@@ -13,11 +13,12 @@ use prost::Message;
 pub struct BlobData {
     pub header: BlobHeader,
     pub blob: Blob,
+    pub size: usize,
 }
 
 impl BlobData {
-    pub fn new(header: BlobHeader, blob: Blob) -> Self {
-        Self { header, blob }
+    pub fn new(header: BlobHeader, blob: Blob, size: usize) -> Self {
+        Self { header, blob, size }
     }
 }
 
