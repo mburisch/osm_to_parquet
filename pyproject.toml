@@ -8,8 +8,14 @@ dependencies = [
     "fsspec[s3]>=2025.9.0",
     "more-itertools>=10.7.0",
     "protobuf>=6",
-    "pyarrow>=20.0.0",
+    "pyarrow>=23",
     "tqdm>=4.67.1",
+]
+
+[dependency-groups]
+dev = [
+    "mypy>=1.19.1",
+    "ruff>=0.15.5",
 ]
 
 [tool.ruff]

@@ -2,11 +2,10 @@ from __future__ import annotations
 
 import zlib
 from collections.abc import Generator
+from compression import zstd
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import BinaryIO
-
-from compression    import zstd
 
 from osmpq.protos.fileformat_pb2 import Blob
 from osmpq.protos.fileformat_pb2 import BlobHeader
