@@ -19,7 +19,7 @@ def main():
     args = parser.parse_args()
 
     writer_config = WriterConfig(
-        max_rows_per_group=16,
+        max_row_group_size=16,
         max_file_size=args.max_file_size_mb * 1024 * 1024,
     )
 

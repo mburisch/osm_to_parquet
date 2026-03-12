@@ -3,10 +3,10 @@ from __future__ import annotations
 import zlib
 from collections.abc import Generator
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from typing import BinaryIO
 
-import zstd
+from compression    import zstd
 
 from osmpq.protos.fileformat_pb2 import Blob
 from osmpq.protos.fileformat_pb2 import BlobHeader
@@ -14,7 +14,7 @@ from osmpq.protos.osmformat_pb2 import HeaderBlock
 from osmpq.protos.osmformat_pb2 import PrimitiveBlock
 
 
-class BlobType(Enum):
+class BlobType(StrEnum):
     OSM_HEADER = "OSMHeader"
     OSM_DATA = "OSMData"
 
