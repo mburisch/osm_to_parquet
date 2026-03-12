@@ -1,26 +1,16 @@
 from __future__ import annotations
 
-from collections.abc import Generator
 from collections.abc import Iterable
 
-import fsspec
 import pyarrow as pa
-import pyarrow.dataset
-import pyarrow.fs
-import pyarrow.parquet as pq
 from more_itertools import batched
 from tqdm import tqdm
 
 from osmpq.osm.blob import BlobData
-from osmpq.osm.blob import read_blobs
+from osmpq.osm.blob import read_pbf_file
 from osmpq.parquet import ARROW_BLOB_SCHEMA
 from osmpq.parquet import ParquetBatchWriter
 from osmpq.parquet import WriterConfig
-
-
-def read_blob_data(filename: str) -> Iterable[BlobData]:
-    with fsspec.open(filename, "rb") as fin:
-        yield from read_blobs(fin)
 
 
 def to_record_batches(blobs: Iterable[BlobData], batch_size: int) -> Iterable[pa.RecordBatch]:
@@ -53,7 +43,7 @@ def write_records(path: str, records: Iterable[pa.RecordBatch], config: WriterCo
 
 
 def pbf_to_blobs(pbf_filename: str, output_path: str, writer_config: WriterConfig) -> None:
-    blobs = read_blob_data(pbf_filename)
+    blobs = read_pbf_file(pbf_filename)
     blobs = tqdm(blobs, desc="Reading blobs", unit_scale=True)
     records = to_record_batches(blobs, writer_config.max_row_group_size)
     write_records(output_path, records, writer_config)

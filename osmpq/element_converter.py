@@ -1,19 +1,23 @@
 from __future__ import annotations
 
 import json
+from collections import deque
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 from typing import Iterable
 from typing import Protocol
 
 import pyarrow as pa
 from google.protobuf.json_format import MessageToDict
-from pyspark.sql import DataFrame
+from tqdm import tqdm
 
 from osmpq.helper import join_path
+from osmpq.osm.blob import BlobData
 from osmpq.osm.blob import BlobType
 from osmpq.osm.blob import decode_header_blob
 from osmpq.osm.blob import decode_primtive_blob
+from osmpq.osm.blob import read_pbf_file
 from osmpq.osm.elements import PrimitiveBlockDecoder
 from osmpq.osm.elements import decode_nodes
 from osmpq.osm.elements import decode_relations
@@ -108,9 +112,32 @@ def prepare_output_path(output_path: str) -> None:
     fs.create_dir(join_path(path, "relations/"))
 
 
-def blobs_to_elements(blobs: DataFrame, writer_config: WriterConfig, output_path: str) -> None:
+def blobs_to_elements(blobs: Iterable[BlobData], writer_config: WriterConfig, output_path: str) -> None:
     prepare_output_path(output_path)
+    # processor = make_processor(output_path, config=writer_config)
 
-    processor = make_processor(output_path, config=writer_config)
 
-    blobs.foreachPartition(lambda partition: processor(partition))
+def decode(blob_data: bytes) -> tuple[pa.RecordBatch, pa.RecordBatch, pa.RecordBatch]:
+    block = decode_primtive_blob(bytes(blob_data))
+    decoder = PrimitiveBlockDecoder(block)
+
+    nodes = record_batch_for_nodes(list(decode_nodes(decoder)))
+    ways = record_batch_for_ways(list(decode_ways(decoder)))
+    relations = record_batch_for_relations(list(decode_relations(decoder)))
+    return nodes, ways, relations
+
+
+def pbf_to_elements(pbf_filename: str, output_path: str, writer_config: WriterConfig) -> None:
+    prepare_output_path(output_path)
+    writer = Writer(output_path, config=writer_config)
+
+    blobs = read_pbf_file(pbf_filename)
+    blobs = tqdm(blobs, desc="Reading blobs", unit_scale=True)
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        for blob in blobs:
+            match blob.header.type:
+                case BlobType.OSM_HEADER.value:
+                    writer.write_header(blob.blob_data)
+                case BlobType.OSM_DATA.value:
+                    executor.submit(decode, blob.blob_data)

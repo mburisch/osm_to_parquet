@@ -6,6 +6,9 @@ from compression import zstd
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import BinaryIO
+from typing import Iterable
+
+import fsspec
 
 from osmpq.protos.fileformat_pb2 import Blob
 from osmpq.protos.fileformat_pb2 import BlobHeader
@@ -48,6 +51,11 @@ def read_blobs(source: BinaryIO) -> Generator[BlobData, None, None]:
         yield data
 
 
+def read_pbf_file(filename: str) -> Iterable[BlobData]:
+    with fsspec.open(filename, "rb") as fin:
+        yield from read_blobs(fin)
+
+
 def decompress_blob(blob: Blob) -> bytes:
     match blob.WhichOneof("data"):
         case "raw":
@@ -72,13 +80,17 @@ def decode_blob(header: BlobHeader, blob_data: bytes) -> HeaderBlock | Primitive
             raise ValueError(f"Unknown blob type: {header.type}")
 
 
-def decode_header_blob(blob_data: bytes) -> HeaderBlock:
+def decode_blob_data(blob_data: bytes) -> bytes:
     blob = Blob.FromString(blob_data)
     data = decompress_blob(blob)
+    return data
+
+
+def decode_header_blob(blob_data: bytes) -> HeaderBlock:
+    data = decode_blob_data(blob_data)
     return HeaderBlock.FromString(data)
 
 
 def decode_primtive_blob(blob_data: bytes) -> PrimitiveBlock:
-    blob = Blob.FromString(blob_data)
-    data = decompress_blob(blob)
+    data = decode_blob_data(blob_data)
     return PrimitiveBlock.FromString(data)

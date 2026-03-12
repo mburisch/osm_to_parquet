@@ -7,5 +7,6 @@ __pycache__
 .vscode
 .devcontainer
 .ruff_cache
+.DS_Store
 
 data/

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 
+from osmpq.element_converter import pbf_to_elements
 from osmpq.parquet import WriterConfig
 from osmpq.pbf_converter import pbf_to_blobs
 
@@ -23,7 +24,8 @@ def main():
         max_file_size=args.max_file_size_mb * 1024 * 1024,
     )
 
-    pbf_to_blobs(args.pbf_filename, args.output_path, writer_config)
+    # pbf_to_blobs(args.pbf_filename, args.output_path, writer_config)
+    pbf_to_elements(args.pbf_filename, args.output_path, writer_config)
 
 
 if __name__ == "__main__":
