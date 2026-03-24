@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Mapping
 
-OsmTags = dict[str, str]
+OsmTags = Mapping[str, str]
 
 
 @dataclass(frozen=True)

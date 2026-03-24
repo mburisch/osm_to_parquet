@@ -33,7 +33,7 @@ pub async fn generate_blobs_async<R: AsyncRead + Unpin>(
     while let Some(blob) = reader.read_blob().await.unwrap() {
         progress.inc_read_bytes(blob.size as u64);
         progress.inc_pbf_blobs(1);
-        //pbf_sender.send(Arc::new(blob)).unwrap();
+        pbf_sender.send(Arc::new(blob)).unwrap();
     }
 }
 

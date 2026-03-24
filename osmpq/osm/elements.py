@@ -93,10 +93,11 @@ class PrimitiveBlockDecoder:
 
     def decode_dense_tags(self, keys_vals: Sequence[int]) -> Generator[OsmTags, None, None]:
         i = 0
-        tags = OsmTags()
+        tags = {}
         while i < len(keys_vals):
             if keys_vals[i] == 0:
                 yield tags
+                tags = {}
                 i += 1
             else:
                 key = self.decode_string(keys_vals[i])
@@ -127,7 +128,7 @@ class PrimitiveBlockDecoder:
             id=way.id,
             info=self.decode_info(way.info),
             tags=self.decode_tags(way.keys, way.vals),
-            nodes=list(delta_decode(way.refs)),
+            nodes=tuple(delta_decode(way.refs)),
         )
 
     def decode_relation(self, relation: Relation) -> OsmRelation:
@@ -135,7 +136,7 @@ class PrimitiveBlockDecoder:
             id=relation.id,
             info=self.decode_info(relation.info),
             tags=self.decode_tags(relation.keys, relation.vals),
-            members=[
+            members=tuple(
                 OsmRelationMember(
                     id=member_id,
                     role=self.decode_string(role_sid),
@@ -144,7 +145,7 @@ class PrimitiveBlockDecoder:
                 for role_sid, member_id, member_type in zip(
                     relation.roles_sid, delta_decode(relation.memids), relation.types
                 )
-            ],
+            ),
         )
 
 

@@ -123,7 +123,7 @@ async fn async_file_reader(progress: impl Progress + 'static) {
 }
 
 async fn file_reader(progress: impl Progress + 'static) {
-    let filename = "/data/osm/us-latest.osm.pbf";
+    let filename = "/Users/mburisch/src/data/osm/us-latest.osm.pbf";
     let mut pbf = PbfReader::for_local_file(filename).unwrap();
 
     while let Some(blob) = pbf.read_blob().unwrap() {
@@ -139,17 +139,17 @@ async fn main() {
 
     //let filename = "/data/osm/nevada-latest.osm.pbf";
     //let filename = "/data/osm/us-latest.osm.pbf";
-    let url = "file:///data/osm/us-latest.osm.pbf";
+    let url = "file:///Users/mburisch/src/data/osm/us-latest.osm.pbf";
     //let url = "file:///data/osm/nevada-latest.osm.pbf";
     //let url = "https://download.geofabrik.de/europe/isle-of-man-latest.osm.pbf";
     //let url = "https://download.geofabrik.de/europe/greece-latest.osm.pbf";
 
-    let output_path = "file:///tmp/osm";
+    let output_path = "file:///Users/mburisch/src/data/parquet";
 
     let progress = ConsoleProgress::new();
     let thread_config = ThreadConfig::default();
 
-    file_reader(progress.clone()).await;
+    //file_reader(progress.clone()).await;
 
-    //process_pbf(url, output_path, thread_config, progress).await;
+    process_pbf(url, output_path, thread_config, progress).await;
 }

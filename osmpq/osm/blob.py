@@ -2,13 +2,11 @@ from __future__ import annotations
 
 import zlib
 from collections.abc import Generator
-from compression import zstd
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import BinaryIO
-from typing import Iterable
 
-import fsspec
+from compression import zstd
 
 from osmpq.protos.fileformat_pb2 import Blob
 from osmpq.protos.fileformat_pb2 import BlobHeader
@@ -49,11 +47,6 @@ def read_blobs(source: BinaryIO) -> Generator[BlobData, None, None]:
         if data is None:
             return
         yield data
-
-
-def read_pbf_file(filename: str) -> Iterable[BlobData]:
-    with fsspec.open(filename, "rb") as fin:
-        yield from read_blobs(fin)
 
 
 def decompress_blob(blob: Blob) -> bytes:
