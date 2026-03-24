@@ -61,18 +61,18 @@ class PrimitiveBlockDecoder:
             user_sid=self.decode_string(info.user_sid) if info.user_sid else None,
         )
 
-    def decode_tags(self, keys: list[int], vals: list[int]) -> OsmTags:
-        keys = (self.decode_string(key) for key in keys)
-        vals = (self.decode_string(val) for val in vals)
-        return OsmTags(zip(keys, vals))
+    def decode_tags(self, keys: Iterable[int], vals: Iterable[int]) -> OsmTags:
+        k = (self.decode_string(key) for key in keys)
+        v = (self.decode_string(val) for val in vals)
+        return OsmTags(zip(k, v))
 
     def decode_node(self, node: Node) -> OsmNode:
         return OsmNode(
             id=node.id,
             info=self.decode_info(node.info),
             tags=self.decode_tags(node.keys, node.vals),
-            latitude=self.value_decoder(node.lat),
-            longitude=self.value_decoder(node.lon),
+            latitude=self.value_decoder.lat(node.lat),
+            longitude=self.value_decoder.lon(node.lon),
         )
 
     def decode_dense_info(self, dense: DenseInfo) -> Generator[OsmInfo, None, None]:
@@ -93,11 +93,11 @@ class PrimitiveBlockDecoder:
 
     def decode_dense_tags(self, keys_vals: Sequence[int]) -> Generator[OsmTags, None, None]:
         i = 0
-        tags = {}
+        tags = OsmTags()
         while i < len(keys_vals):
             if keys_vals[i] == 0:
                 yield tags
-                tags = {}
+                tags = OsmTags()
                 i += 1
             else:
                 key = self.decode_string(keys_vals[i])
@@ -128,7 +128,7 @@ class PrimitiveBlockDecoder:
             id=way.id,
             info=self.decode_info(way.info),
             tags=self.decode_tags(way.keys, way.vals),
-            nodes=tuple(delta_decode(way.refs)),
+            nodes=list(delta_decode(way.refs)),
         )
 
     def decode_relation(self, relation: Relation) -> OsmRelation:
@@ -136,7 +136,7 @@ class PrimitiveBlockDecoder:
             id=relation.id,
             info=self.decode_info(relation.info),
             tags=self.decode_tags(relation.keys, relation.vals),
-            members=tuple(
+            members=[
                 OsmRelationMember(
                     id=member_id,
                     role=self.decode_string(role_sid),
@@ -145,7 +145,7 @@ class PrimitiveBlockDecoder:
                 for role_sid, member_id, member_type in zip(
                     relation.roles_sid, delta_decode(relation.memids), relation.types
                 )
-            ),
+            ],
         )
 
 

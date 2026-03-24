@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import argparse
 
-from osmpq.arrow import WriterConfig
 from osmpq.blobs import pbf_to_blob_parquet
+from osmpq.io import WriterConfig
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -20,7 +20,7 @@ def main():
     args = parser.parse_args()
 
     writer_config = WriterConfig(
-        max_row_group_size=16,
+        max_rows_per_row_group=16,
         max_file_size_bytes=args.max_file_size_mb * 1024 * 1024,
     )
 

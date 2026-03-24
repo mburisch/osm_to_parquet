@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import Any
 from typing import Iterable
 
 import pyarrow as pa
@@ -78,20 +79,23 @@ ARROW_RELATION_SCHEMA = pa.schema(ARROW_RELATION_FIELDS)
 
 
 def record_batches_for_blobs(blobs: Sequence[BlobData]) -> pa.RecordBatch:
-    data = {
-        "blob_type": [blob.header.type for blob in blobs],
-        "header_data": [blob.header_data for blob in blobs],
-        "blob_data": [blob.blob_data for blob in blobs],
-    }
-    record = pa.RecordBatch.from_pydict(data, schema=ARROW_BLOB_SCHEMA)
-    return record
+    blob_type = [blob.header.type for blob in blobs]
+    header_data = [blob.header_data for blob in blobs]
+    blob_data = [blob.blob_data for blob in blobs]
+
+    arrays = [
+        pa.array(blob_type, type=pa.string()),
+        pa.array(header_data, type=pa.binary()),
+        pa.array(blob_data, type=pa.binary()),
+    ]
+    return pa.RecordBatch.from_arrays(arrays, schema=ARROW_BLOB_SCHEMA)
 
 
 def _get_tags_array(tags: OsmTags) -> Sequence[tuple[str, str]]:
     return list(tags.items())
 
 
-def record_batch_for_nodes(nodes: list[OsmNode]) -> pa.RecordBatch | None:
+def record_batch_for_nodes(nodes: Sequence[OsmNode]) -> pa.RecordBatch | None:
     if not nodes:
         return None
 
@@ -104,7 +108,7 @@ def record_batch_for_nodes(nodes: list[OsmNode]) -> pa.RecordBatch | None:
     uids = [node.info.uid for node in nodes]
     user_sids = [node.info.user_sid for node in nodes]
 
-    tags = [None] * len(nodes)
+    tags: list[Sequence[tuple[str, str]] | None] = [None] * len(nodes)
     for i, node in enumerate(nodes):
         if node.tags is not None:
             tags[i] = _get_tags_array(node.tags)
@@ -123,7 +127,7 @@ def record_batch_for_nodes(nodes: list[OsmNode]) -> pa.RecordBatch | None:
     return pa.RecordBatch.from_arrays(arrays, schema=ARROW_NODE_SCHEMA)
 
 
-def record_batch_for_ways(ways: list[OsmWay]) -> pa.RecordBatch | None:
+def record_batch_for_ways(ways: Sequence[OsmWay]) -> pa.RecordBatch | None:
     if not ways:
         return None
 
@@ -135,7 +139,7 @@ def record_batch_for_ways(ways: list[OsmWay]) -> pa.RecordBatch | None:
     uids = [way.info.uid for way in ways]
     user_sids = [way.info.user_sid for way in ways]
 
-    tags = [None] * len(ways)
+    tags: list[Sequence[tuple[str, str]] | None] = [None] * len(ways)
     for i, way in enumerate(ways):
         if way.tags is not None:
             tags[i] = _get_tags_array(way.tags)
@@ -154,7 +158,7 @@ def record_batch_for_ways(ways: list[OsmWay]) -> pa.RecordBatch | None:
     return pa.RecordBatch.from_arrays(arrays, schema=ARROW_WAY_SCHEMA)
 
 
-def record_batch_for_relations(relations: list[OsmRelation]) -> pa.RecordBatch | None:
+def record_batch_for_relations(relations: Sequence[OsmRelation]) -> pa.RecordBatch | None:
     if not relations:
         return None
 
@@ -165,12 +169,12 @@ def record_batch_for_relations(relations: list[OsmRelation]) -> pa.RecordBatch |
     uids = [relation.info.uid for relation in relations]
     user_sids = [relation.info.user_sid for relation in relations]
 
-    tags = [None] * len(relations)
+    tags: list[Sequence[tuple[str, str]] | None] = [None] * len(relations)
     for i, relation in enumerate(relations):
         if relation.tags is not None:
             tags[i] = _get_tags_array(relation.tags)
 
-    members = [None] * len(relations)
+    members: list[list[tuple[int, str, str]] | None] = [None] * len(relations)
     for i, relation in enumerate(relations):
         if relation.members is not None:
             members[i] = [(m.id, m.role, m.type) for m in relation.members]

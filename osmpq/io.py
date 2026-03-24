@@ -9,23 +9,22 @@ from typing import Iterable
 
 import fsspec
 import pyarrow as pa
+import pyarrow.fs
 import pyarrow.parquet as pq
 from google.protobuf.json_format import MessageToDict
 
+from osmpq.arrow import ARROW_BLOB_SCHEMA
 from osmpq.arrow import ARROW_NODE_SCHEMA
 from osmpq.arrow import ARROW_RELATION_SCHEMA
 from osmpq.arrow import ARROW_WAY_SCHEMA
-from osmpq.arrow import record_batch_for_nodes
-from osmpq.arrow import record_batch_for_relations
-from osmpq.arrow import record_batch_for_ways
 from osmpq.osm.blob import BlobData
 from osmpq.osm.blob import decode_header_blob
-from osmpq.osm.blob import decode_primtive_blob
 from osmpq.osm.blob import read_blobs
-from osmpq.osm.elements import PrimitiveBlockDecoder
-from osmpq.osm.elements import decode_nodes
-from osmpq.osm.elements import decode_relations
-from osmpq.osm.elements import decode_ways
+
+
+def get_arrow_fs(path: str) -> tuple[pa.fs.FileSystem, str]:
+    fs, base_path = pyarrow.fs.FileSystem.from_uri(path)
+    return fs, base_path
 
 
 def read_blobs_from_pbf(filename: str) -> Iterable[BlobData]:
@@ -82,7 +81,7 @@ class Writer:
         self.writer.close()
 
 
-class ParquetBatchWriter:
+class MultiParquetWriter:
     def __init__(
         self, fs: pa.fs.FileSytem, base_path: str, filename_template: str, schema: pa.Schema, config: WriterConfig
     ) -> None:
@@ -113,14 +112,14 @@ class ParquetBatchWriter:
         return self._writer
 
     def write(self, batch: pa.RecordBatch | None) -> None:
-        if batch is None:
+        if batch is None or batch.num_rows == 0:
             return
         writer = self._get_writer()
         writer.write(batch)
         if self._should_switch_writer():
             self.close()
 
-    def _should_switch_writer(self) -> None:
+    def _should_switch_writer(self) -> bool:
         if self._writer is None:
             return False
 
@@ -143,41 +142,39 @@ class ParquetBatchWriter:
             self._writer.close()
             self._writer = None
 
-    def __enter__(self) -> ParquetBatchWriter:
+    def __enter__(self) -> MultiParquetWriter:
         return self
 
     def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
         self.close()
 
 
-def prepare_output_path(output_path: str) -> None:
-    fs, path = pa.fs.FileSystem.from_uri(output_path)
-    fs.create_dir(path, recursive=True)
-    fs.delete_dir_contents(path)
-    fs.create_dir(join_path(path, "nodes/"))
-    fs.create_dir(join_path(path, "ways/"))
-    fs.create_dir(join_path(path, "relations/"))
+@dataclass(frozen=True)
+class ElementBatch:
+    nodes: pa.RecordBatch | None = None
+    ways: pa.RecordBatch | None = None
+    relations: pa.RecordBatch | None = None
 
 
 class ElementsWriter:
     def __init__(self, fs: pa.fs.FileSytem, base_path: str, config: WriterConfig) -> None:
         self.fs = fs
 
-        self.nodes = ParquetBatchWriter(
+        self.nodes = MultiParquetWriter(
             fs=fs,
             base_path=os.path.join(base_path, "nodes/"),
             filename_template="nodes_{file_id}_{index:05d}.parquet",
             schema=ARROW_NODE_SCHEMA,
             config=config,
         )
-        self.ways = ParquetBatchWriter(
+        self.ways = MultiParquetWriter(
             fs=fs,
             base_path=os.path.join(base_path, "ways/"),
             filename_template="ways_{file_id}_{index:05d}.parquet",
             schema=ARROW_WAY_SCHEMA,
             config=config,
         )
-        self.relations = ParquetBatchWriter(
+        self.relations = MultiParquetWriter(
             fs=fs,
             base_path=os.path.join(base_path, "relations/"),
             filename_template="relations_{file_id}_{index:05d}.parquet",
@@ -185,18 +182,24 @@ class ElementsWriter:
             config=config,
         )
 
-    def write_elements(self, blob_data: bytes) -> None:
-        block = decode_primtive_blob(bytes(blob_data))
-        decoder = PrimitiveBlockDecoder(block)
+    def write(self, batch: ElementBatch) -> None:
+        self.nodes.write(batch.nodes)
+        self.ways.write(batch.ways)
+        self.relations.write(batch.relations)
 
-        self.nodes.write(record_batch_for_nodes(list(decode_nodes(decoder))))
-        self.ways.write(record_batch_for_ways(list(decode_ways(decoder))))
-        self.relations.write(record_batch_for_relations(list(decode_relations(decoder))))
-
-    def __enter__(self) -> Writer:
+    def __enter__(self) -> ElementsWriter:
         return self
 
     def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
-        self.nodes_writer.close()
-        self.ways_writer.close()
-        self.relations_writer.close()
+        self.nodes.close()
+        self.ways.close()
+        self.relations.close()
+
+
+def create_elements_writer(path: str, config: WriterConfig) -> ElementsWriter:
+    fs, base_path = get_arrow_fs(path)
+    return ElementsWriter(
+        fs=fs,
+        base_path=base_path,
+        config=config,
+    )

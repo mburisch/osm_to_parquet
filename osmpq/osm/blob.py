@@ -2,11 +2,10 @@ from __future__ import annotations
 
 import zlib
 from collections.abc import Generator
+from compression import zstd
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import BinaryIO
-
-from compression import zstd
 
 from osmpq.protos.fileformat_pb2 import Blob
 from osmpq.protos.fileformat_pb2 import BlobHeader
@@ -65,9 +64,9 @@ def decode_blob(header: BlobHeader, blob_data: bytes) -> HeaderBlock | Primitive
     blob = Blob.FromString(blob_data)
     data = decompress_blob(blob)
     match header.type:
-        case BlobType.OSM_HEADER.value:
+        case BlobType.OSM_HEADER:
             return HeaderBlock.FromString(data)
-        case BlobType.OSM_DATA.value:
+        case BlobType.OSM_DATA:
             return PrimitiveBlock.FromString(data)
         case _:
             raise ValueError(f"Unknown blob type: {header.type}")

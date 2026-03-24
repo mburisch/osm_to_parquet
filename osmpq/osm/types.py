@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Mapping
 
-OsmTags = Mapping[str, str]
+OsmTags = dict[str, str]
 
 
 @dataclass(frozen=True)

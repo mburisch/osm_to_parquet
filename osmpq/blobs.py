@@ -8,8 +8,9 @@ from tqdm import tqdm
 
 from osmpq.arrow import ARROW_BLOB_SCHEMA
 from osmpq.arrow import record_batches_for_blobs
-from osmpq.io import ParquetBatchWriter
+from osmpq.io import MultiParquetWriter
 from osmpq.io import WriterConfig
+from osmpq.io import get_arrow_fs
 from osmpq.io import read_blobs_from_pbf
 from osmpq.io import write_header_as_json
 from osmpq.osm.blob import BlobData
@@ -21,15 +22,15 @@ def to_record_batches(blobs: Iterable[BlobData], batch_size: int) -> Iterable[pa
         yield record_batches_for_blobs(batch)
 
 
-def write_record_batches(records: Iterable[pa.RecordBatch], writer: ParquetBatchWriter) -> None:
+def write_record_batches(records: Iterable[pa.RecordBatch], writer: MultiParquetWriter) -> None:
     with writer:
         for record in records:
             writer.write(record)
 
 
-def create_writer(path: str, config: WriterConfig) -> ParquetBatchWriter:
-    fs, base_path = pa.fs.FileSystem.from_uri(path)
-    return ParquetBatchWriter(
+def create_blobs_writer(path: str, config: WriterConfig) -> MultiParquetWriter:
+    fs, base_path = get_arrow_fs(path)
+    return MultiParquetWriter(
         fs=fs,
         base_path=base_path,
         filename_template="osm_pbf_blobs_part_{index:05d}.parquet",
@@ -52,12 +53,12 @@ def pbf_to_blob_parquet(
     header_output_filename: str | None,
     writer_config: WriterConfig,
 ) -> None:
-    writer = create_writer(output_path, writer_config)
+    writer = create_blobs_writer(output_path, writer_config)
 
     blobs = read_blobs_from_pbf(pbf_filename)
     if header_output_filename is not None:
         blobs = header_extractor(blobs, header_output_filename)
 
     blobs = tqdm(blobs, desc="Reading blobs", unit_scale=True)
-    records = to_record_batches(blobs, writer_config.max_rows_per_row_group)
+    records = to_record_batches(blobs, writer_config.max_rows_per_row_group or 16)
     write_record_batches(records, writer)
