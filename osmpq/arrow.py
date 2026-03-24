@@ -4,7 +4,6 @@ from collections.abc import Sequence
 
 import pyarrow as pa
 
-from osmpq.osm.blob import BlobData
 from osmpq.osm.types import OsmNode
 from osmpq.osm.types import OsmRelation
 from osmpq.osm.types import OsmTags

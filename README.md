@@ -4,6 +4,8 @@
 * Split a pbf file into smaller pbf files
 * Convert a pbf file to parquet with nodes, ways, and relations
 
+When splitting a pbf file the header blob is duplicated into all files.
+
 For best efficiency split the OSM pbf into smaller files to later convert them in parallel.
 Once the pbf file is split into smaller parts, use multiple machines (or processes) to
 extract the elements (nodes, ways, relations) and store as Parquet files.

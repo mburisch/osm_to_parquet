@@ -9,7 +9,6 @@ from typing import Iterable
 
 import fsspec
 import pyarrow as pa
-import pyarrow.dataset
 import pyarrow.parquet as pq
 from fsspec.spec import AbstractFileSystem
 
@@ -141,11 +140,36 @@ class MultiParquetWriter:
         self.close()
 
 
+@dataclass
+class ElementCount:
+    nodes: int = 0
+    ways: int = 0
+    relations: int = 0
+
+    @property
+    def total(self) -> int:
+        return self.nodes + self.ways + self.relations
+
+    def __iadd__(self, other: ElementCount) -> ElementCount:
+        self.nodes += other.nodes
+        self.ways += other.ways
+        self.relations += other.relations
+        return self
+
+
 @dataclass(frozen=True)
 class ElementBatch:
     nodes: pa.RecordBatch | None = None
     ways: pa.RecordBatch | None = None
     relations: pa.RecordBatch | None = None
+
+    @property
+    def count(self) -> ElementCount:
+        return ElementCount(
+            nodes=self.nodes.num_rows if self.nodes is not None else 0,
+            ways=self.ways.num_rows if self.ways is not None else 0,
+            relations=self.relations.num_rows if self.relations is not None else 0,
+        )
 
 
 @dataclass

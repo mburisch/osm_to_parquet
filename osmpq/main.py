@@ -142,6 +142,7 @@ def split_command(
     max_file_size_mb: int,
 ) -> None:
     """Split an OSM PBF into smaller blob PBF files."""
+    clear_output_path(output_path)
     split_pbf(
         pbf_filename=pbf_filename,
         output_folder=output_path,

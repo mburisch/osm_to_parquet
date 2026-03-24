@@ -8,6 +8,7 @@ from osmpq.arrow import record_batch_for_nodes
 from osmpq.arrow import record_batch_for_relations
 from osmpq.arrow import record_batch_for_ways
 from osmpq.io import ElementBatch
+from osmpq.io import ElementCount
 from osmpq.io import ElementsWriter
 from osmpq.io import FileTemplates
 from osmpq.io import WriterConfig
@@ -60,7 +61,7 @@ def pbf_to_elements_parquet(
     if header_output_filename is not None:
         blobs = header_extractor(blobs, header_output_filename)
 
-    blobs = tqdm(blobs, desc="Processing blobs", unit_scale=True)
+    # blobs = tqdm(blobs, desc="Processing blobs", unit_scale=True)
     batches = to_record_batches(blobs)
 
     writer = ElementsWriter(
@@ -69,6 +70,13 @@ def pbf_to_elements_parquet(
         file_templates=file_templates or FileTemplates.for_hash(pbf_filename),
     )
 
-    with writer:
+    count = ElementCount()
+    with writer, tqdm(desc="Writing batches", unit="rows", unit_scale=True) as pbar:
         for batch in batches:
             writer.write(batch)
+            count += batch.count
+            pbar.update(batch.count.total)
+
+    print(f"Nodes:     {count.nodes:,}")
+    print(f"Ways:      {count.ways:,}")
+    print(f"Relations: {count.relations:,}")
