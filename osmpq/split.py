@@ -99,10 +99,3 @@ def split_pbf(pbf_filename: str, output_folder: str, max_file_size_bytes: int) -
         blobs = read_blobs(fin)
         for blob in tqdm(blobs, desc="Writing blobs", unit_scale=True):
             writer.write(blob)
-
-
-def clear_output_path(path: str) -> None:
-    fs, base_path = fsspec.core.url_to_fs(path)
-    if fs.exists(base_path):
-        fs.rm(base_path, recursive=True)
-    fs.makedirs(base_path, exist_ok=True)

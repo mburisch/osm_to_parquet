@@ -1,31 +1,32 @@
 # Tools to convert OSM pbf files to parquet
 
 ## Python
-* Convert a pbf file to a parquet where each row is a blob.
-* Convert a parquet with blobs to nodes, ways, and relation parquets.
-* Convert a pbf file to parquet with nodes, ways, and relations directly.
+* Split a pbf file into smaller pbf files
+* Convert a pbf file to parquet with nodes, ways, and relations
 
-For best efficiency convert the OSM pbf to blobs first, as pbf cannot be easily read
-in parallel. Therefore, the pbf should be read directly from the cloud (e.g. http, s3, gcs)
-and written to the cloud. Then in a next step using multiple machines (e.g. Spark) the blob parquet
-files should be read and converted to actual OSM elements (nodes, ways, relations).
+For best efficiency split the OSM pbf into smaller files to later convert them in parallel.
+Splitting the pbf files supports reading and writing to cloud (e.g. http, s3, gcs) directly.
+Once the pbf file is split into smaller parts, use multiple machines (or processes) to
+extract the elements (nodes, ways, relations) and store as Parquet files.
+
+Splitting the pbf files is generally I/O limited as it does very little actual processing.
+Processing a pbf file is compute limited, so it will profit from parallelization. 
 
 Convert PBF to Parquet file
 ```bash
-osmpq-pbf-extract blobs \
+osmpq-pbf-extract split \
     --pbf-filename path_to_pbf.pbf \
-    --output-path blobs_output_folder \
-    --header-output-filename option_header_path.json
+    --output-path pbf_output_folder
 ```
 
 In parallel for every Parquet file call
 ```bash
-osmpq-pbf-extract parquet-elements \
-    --blob-parquet-filename path_to_one_blob_parquet_file.parquet \
-    --output-path elements_output_folder
+osmpq-pbf-extract elements \
+    --pbf-filename pbf_filename.pbf \
+    --output-path parquet_output_folder
 ```
 
-The output folder will have nodes/, ways/, and relations/ subfolders with resulting parquet files.
+The output folder will have nodes/, ways/, and relations/ subfolders containing the Parquet files.
 
 ## Rust
 Convert a pbf file to parquets for nodes, ways, relations

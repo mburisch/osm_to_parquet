@@ -13,7 +13,7 @@ dependencies = [
 ]
 
 [project.scripts]
-osmpq-pbf-extract = "osmpq.cli.pbf_extract:main"
+osmpq-pbf-extract = "osmpq.main:main"
 
 [dependency-groups]
 cli = [

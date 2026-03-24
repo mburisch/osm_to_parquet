@@ -13,7 +13,6 @@ import pyarrow.dataset
 import pyarrow.parquet as pq
 from fsspec.spec import AbstractFileSystem
 
-from osmpq.arrow import ARROW_BLOB_SCHEMA
 from osmpq.arrow import ARROW_NODE_SCHEMA
 from osmpq.arrow import ARROW_RELATION_SCHEMA
 from osmpq.arrow import ARROW_WAY_SCHEMA
@@ -48,7 +47,6 @@ def clear_output_path(path: str) -> None:
     fs, base_path = get_fs(path)
     if fs.exists(base_path):
         fs.rm(base_path, recursive=True)
-    fs.makedirs(base_path, exist_ok=True)
 
 
 @dataclass

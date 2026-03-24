@@ -7,13 +7,13 @@ from tqdm import tqdm
 from osmpq.arrow import record_batch_for_nodes
 from osmpq.arrow import record_batch_for_relations
 from osmpq.arrow import record_batch_for_ways
-from osmpq.blobs import header_extractor
 from osmpq.io import ElementBatch
 from osmpq.io import ElementsWriter
 from osmpq.io import FileTemplates
 from osmpq.io import WriterConfig
 from osmpq.io import create_output_path
 from osmpq.io import read_blobs_from_pbf
+from osmpq.io import write_header_as_json
 from osmpq.osm.blob import BlobData
 from osmpq.osm.blob import BlobType
 from osmpq.osm.blob import decode_primtive_blob
@@ -40,6 +40,14 @@ def to_record_batches(blobs: Iterable[BlobData]) -> Iterable[ElementBatch]:
             yield to_record_batch(blob_data.blob_data)
 
 
+def header_extractor(blobs: Iterable[BlobData], filename: str) -> Iterable[BlobData]:
+    for blob in blobs:
+        if blob.header.type == BlobType.OSM_HEADER.value:
+            write_header_as_json(filename, blob.blob_data)
+
+        yield blob
+
+
 def pbf_to_elements_parquet(
     pbf_filename: str,
     output_path: str,
@@ -53,12 +61,12 @@ def pbf_to_elements_parquet(
         blobs = header_extractor(blobs, header_output_filename)
 
     blobs = tqdm(blobs, desc="Processing blobs", unit_scale=True)
-    batches = to_record_batches(blobs, writer_config.max_rows_per_row_group or 16)
+    batches = to_record_batches(blobs)
 
     writer = ElementsWriter(
         path=output_path,
         config=writer_config,
-        file_templates=file_templates,
+        file_templates=file_templates or FileTemplates.for_hash(pbf_filename),
     )
 
     with writer:
