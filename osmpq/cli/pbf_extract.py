@@ -10,6 +10,7 @@ from osmpq.blobs import pbf_to_blob_parquet
 from osmpq.elements import pbf_parquet_to_elements_parquet
 from osmpq.elements import pbf_to_elements_parquet
 from osmpq.io import WriterConfig
+from osmpq.io import clear_output_path
 
 CommandFn = TypeVar("CommandFn", bound=Callable[..., Any])
 
@@ -98,6 +99,13 @@ def main() -> None:
     """Convert OSM PBF data into Parquet outputs."""
 
 
+@main.command(name="clear-output-path")
+@click.option("--output-path", required=True, type=str, help="Output directory path or URI.")
+def clear_output_path_command(output_path: str) -> None:
+    """Clear the output directory path."""
+    clear_output_path(output_path)
+
+
 @main.command(name="blobs")
 @pbf_input_options
 @writer_options
@@ -109,6 +117,7 @@ def blobs_command(
     max_rows_per_file: int | None,
     max_file_size_mb: int,
 ) -> None:
+    """Convert OSM PBF data into blob Parquet files."""
     writer_config = WriterConfig(
         max_rows_per_row_group=max_rows_per_row_group,
         max_rows_per_file=max_rows_per_file,
@@ -128,6 +137,7 @@ def osm_elements_command(
     max_rows_per_file: int | None,
     max_file_size_mb: int,
 ) -> None:
+    """Convert OSM PBF data into elements (nodes, ways, relations) Parquet files."""
     writer_config = WriterConfig(
         max_rows_per_row_group=max_rows_per_row_group,
         max_rows_per_file=max_rows_per_file,
@@ -146,6 +156,7 @@ def parquet_elements_command(
     max_rows_per_file: int | None,
     max_file_size_mb: int,
 ) -> None:
+    """Convert a single blob Parquet file into elements (nodes, ways, relations) Parquet files."""
     writer_config = WriterConfig(
         max_rows_per_row_group=max_rows_per_row_group,
         max_rows_per_file=max_rows_per_file,

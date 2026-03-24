@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from typing import Iterable
 
 import pyarrow as pa
@@ -15,8 +16,10 @@ from osmpq.blobs import from_record_batch
 from osmpq.blobs import header_extractor
 from osmpq.io import ElementBatch
 from osmpq.io import ElementsWriter
+from osmpq.io import FileTemplates
 from osmpq.io import WriterConfig
 from osmpq.io import clear_output_path
+from osmpq.io import create_output_path
 from osmpq.io import read_blobs_from_parquet
 from osmpq.io import read_blobs_from_pbf
 from osmpq.osm.blob import BlobData
@@ -45,21 +48,13 @@ def to_record_batches(blobs: Iterable[BlobData]) -> Iterable[ElementBatch]:
             yield to_record_batch(blob_data.blob_data)
 
 
-def create_elements_writer(path: str, config: WriterConfig) -> ElementsWriter:
-    return ElementsWriter(
-        path=path,
-        config=config,
-    )
-
-
 def to_elements_parquet(
     blobs: Iterable[BlobData],
-    output_path: str,
-    writer_config: WriterConfig,
+    writer: ElementsWriter,
 ) -> None:
     blobs = tqdm(blobs, desc="Processing blobs", unit_scale=True)
     batches = to_record_batches(blobs)
-    with create_elements_writer(output_path, writer_config) as writer:
+    with writer:
         for batch in batches:
             writer.write(batch)
 
@@ -69,20 +64,33 @@ def pbf_to_elements_parquet(
     output_path: str,
     header_output_filename: str | None,
     writer_config: WriterConfig,
+    file_templates: FileTemplates | None = None,
 ) -> None:
     clear_output_path(output_path)
     blobs = read_blobs_from_pbf(pbf_filename)
     if header_output_filename is not None:
         blobs = header_extractor(blobs, header_output_filename)
 
-    to_elements_parquet(blobs, output_path, writer_config)
+    writer = ElementsWriter(
+        path=output_path,
+        config=writer_config,
+        file_templates=file_templates,
+    )
+    to_elements_parquet(blobs, writer)
 
 
 def pbf_parquet_to_elements_parquet(
     blob_parquet_filename: str,
     output_path: str,
     writer_config: WriterConfig,
+    file_templates: FileTemplates | None = None,
 ) -> None:
+    create_output_path(output_path)
     batches = read_blobs_from_parquet(blob_parquet_filename)
     blobs = (blob for batch in batches for blob in from_record_batch(batch))
-    to_elements_parquet(blobs, output_path, writer_config)
+    writer = ElementsWriter(
+        path=output_path,
+        config=writer_config,
+        file_templates=file_templates or FileTemplates.for_hash(blob_parquet_filename),
+    )
+    to_elements_parquet(blobs, writer)

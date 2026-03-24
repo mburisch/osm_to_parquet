@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os.path
-import uuid
 from dataclasses import dataclass
 from typing import Any
 from typing import Iterable
@@ -37,6 +37,11 @@ def write_header_as_json(filename: str, blob_data: bytes) -> None:
 
     with fsspec.open(filename, "wb") as fout:
         fout.write(json.dumps(header, indent=2).encode())
+
+
+def create_output_path(path: str) -> None:
+    fs, base_path = get_fs(path)
+    fs.makedirs(base_path, exist_ok=True)
 
 
 def clear_output_path(path: str) -> None:
@@ -88,7 +93,6 @@ class MultiParquetWriter:
         self.filename_template = filename_template
         self.schema = schema
         self.writer_config = config
-        self.unique_id = str(uuid.uuid4()).replace("-", "_")
         self._file_index = 0
 
         self._writer: Writer | None = None
@@ -96,9 +100,8 @@ class MultiParquetWriter:
     def _get_writer(self) -> Writer:
         if self._writer is None:
             self._file_index += 1
-            filename = os.path.join(
-                self.path, self.filename_template.format(file_id=self.unique_id, index=self._file_index)
-            )
+            create_output_path(self.path)
+            filename = os.path.join(self.path, self.filename_template.format(index=self._file_index))
             self._writer = Writer.create(
                 filename=filename,
                 schema=self.schema,
@@ -147,23 +150,50 @@ class ElementBatch:
     relations: pa.RecordBatch | None = None
 
 
+@dataclass
+class FileTemplates:
+    nodes: str = "nodes_{index:05d}.parquet"
+    ways: str = "ways_{index:05d}.parquet"
+    relations: str = "relations_{index:05d}.parquet"
+
+    @classmethod
+    def for_id(cls, file_id: str) -> FileTemplates:
+        return cls(
+            nodes=f"nodes_{file_id}_{{index:05d}}.parquet",
+            ways=f"ways_{file_id}_{{index:05d}}.parquet",
+            relations=f"relations_{file_id}_{{index:05d}}.parquet",
+        )
+
+    @classmethod
+    def for_hash(cls, value_to_hash: str) -> FileTemplates:
+        hash_value = hashlib.sha256(value_to_hash.encode()).hexdigest()
+        return cls(
+            nodes=f"nodes_{hash_value}_{{index:05d}}.parquet",
+            ways=f"ways_{hash_value}_{{index:05d}}.parquet",
+            relations=f"relations_{hash_value}_{{index:05d}}.parquet",
+        )
+
+
 class ElementsWriter:
-    def __init__(self, path: str, config: WriterConfig) -> None:
+    def __init__(self, path: str, config: WriterConfig, file_templates: FileTemplates | None = None) -> None:
+        if file_templates is None:
+            file_templates = FileTemplates()
+
         self.nodes = MultiParquetWriter(
             path=os.path.join(path, "nodes/"),
-            filename_template="nodes_{file_id}_{index:05d}.parquet",
+            filename_template=file_templates.nodes,
             schema=ARROW_NODE_SCHEMA,
             config=config,
         )
         self.ways = MultiParquetWriter(
             path=os.path.join(path, "ways/"),
-            filename_template="ways_{file_id}_{index:05d}.parquet",
+            filename_template=file_templates.ways,
             schema=ARROW_WAY_SCHEMA,
             config=config,
         )
         self.relations = MultiParquetWriter(
             path=os.path.join(path, "relations/"),
-            filename_template="relations_{file_id}_{index:05d}.parquet",
+            filename_template=file_templates.relations,
             schema=ARROW_RELATION_SCHEMA,
             config=config,
         )
