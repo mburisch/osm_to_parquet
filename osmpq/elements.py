@@ -1,14 +1,9 @@
 from __future__ import annotations
 
-import uuid
 from typing import Iterable
 
-import pyarrow as pa
 from tqdm import tqdm
 
-from osmpq.arrow import ARROW_NODE_SCHEMA
-from osmpq.arrow import ARROW_RELATION_SCHEMA
-from osmpq.arrow import ARROW_WAY_SCHEMA
 from osmpq.arrow import record_batch_for_nodes
 from osmpq.arrow import record_batch_for_relations
 from osmpq.arrow import record_batch_for_ways

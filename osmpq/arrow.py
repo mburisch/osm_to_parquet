@@ -1,11 +1,8 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any
-from typing import Iterable
 
 import pyarrow as pa
-from more_itertools import batched
 
 from osmpq.osm.blob import BlobData
 from osmpq.osm.types import OsmNode
