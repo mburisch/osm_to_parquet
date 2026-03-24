@@ -39,10 +39,11 @@ def write_header_as_json(filename: str, blob_data: bytes) -> None:
         fout.write(json.dumps(header, indent=2).encode())
 
 
-def clear_output_path(fs: AbstractFileSystem, path: str) -> None:
-    if fs.exists(path):
-        fs.rm(path, recursive=True)
-    fs.makedirs(path, exist_ok=True)
+def clear_output_path(path: str) -> None:
+    fs, base_path = get_fs(path)
+    if fs.exists(base_path):
+        fs.rm(base_path, recursive=True)
+    fs.makedirs(base_path, exist_ok=True)
 
 
 @dataclass
@@ -60,9 +61,10 @@ class Writer:
     written_bytes: int = 0
 
     @classmethod
-    def create(cls, fs: AbstractFileSystem, filename: str, schema: pa.Schema) -> Writer:
+    def create(cls, filename: str, schema: pa.Schema) -> Writer:
+        fs, path = get_fs(filename)
         writer = pq.ParquetWriter(
-            filename,
+            path,
             schema=schema,
             flavor="spark",
             filesystem=fs,
@@ -81,11 +83,8 @@ class Writer:
 
 
 class MultiParquetWriter:
-    def __init__(
-        self, fs: AbstractFileSystem, base_path: str, filename_template: str, schema: pa.Schema, config: WriterConfig
-    ) -> None:
-        self.fs = fs
-        self.base_path = base_path
+    def __init__(self, path: str, filename_template: str, schema: pa.Schema, config: WriterConfig) -> None:
+        self.path = path
         self.filename_template = filename_template
         self.schema = schema
         self.writer_config = config
@@ -94,16 +93,13 @@ class MultiParquetWriter:
 
         self._writer: Writer | None = None
 
-        clear_output_path(fs, base_path)
-
     def _get_writer(self) -> Writer:
         if self._writer is None:
             self._file_index += 1
             filename = os.path.join(
-                self.base_path, self.filename_template.format(file_id=self.unique_id, index=self._file_index)
+                self.path, self.filename_template.format(file_id=self.unique_id, index=self._file_index)
             )
             self._writer = Writer.create(
-                fs=self.fs,
                 filename=filename,
                 schema=self.schema,
             )
@@ -152,26 +148,21 @@ class ElementBatch:
 
 
 class ElementsWriter:
-    def __init__(self, fs: AbstractFileSystem, base_path: str, config: WriterConfig) -> None:
-        self.fs = fs
-
+    def __init__(self, path: str, config: WriterConfig) -> None:
         self.nodes = MultiParquetWriter(
-            fs=fs,
-            base_path=os.path.join(base_path, "nodes/"),
+            path=os.path.join(path, "nodes/"),
             filename_template="nodes_{file_id}_{index:05d}.parquet",
             schema=ARROW_NODE_SCHEMA,
             config=config,
         )
         self.ways = MultiParquetWriter(
-            fs=fs,
-            base_path=os.path.join(base_path, "ways/"),
+            path=os.path.join(path, "ways/"),
             filename_template="ways_{file_id}_{index:05d}.parquet",
             schema=ARROW_WAY_SCHEMA,
             config=config,
         )
         self.relations = MultiParquetWriter(
-            fs=fs,
-            base_path=os.path.join(base_path, "relations/"),
+            path=os.path.join(path, "relations/"),
             filename_template="relations_{file_id}_{index:05d}.parquet",
             schema=ARROW_RELATION_SCHEMA,
             config=config,
@@ -189,15 +180,6 @@ class ElementsWriter:
         self.nodes.close()
         self.ways.close()
         self.relations.close()
-
-
-def create_elements_writer(path: str, config: WriterConfig) -> ElementsWriter:
-    fs, base_path = get_fs(path)
-    return ElementsWriter(
-        fs=fs,
-        base_path=base_path,
-        config=config,
-    )
 
 
 def read_blobs_from_parquet(filename: str) -> Iterable[pa.RecordBatch]:

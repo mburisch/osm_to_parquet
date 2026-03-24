@@ -14,8 +14,9 @@ from osmpq.arrow import record_batch_for_ways
 from osmpq.blobs import from_record_batch
 from osmpq.blobs import header_extractor
 from osmpq.io import ElementBatch
+from osmpq.io import ElementsWriter
 from osmpq.io import WriterConfig
-from osmpq.io import create_elements_writer
+from osmpq.io import clear_output_path
 from osmpq.io import read_blobs_from_parquet
 from osmpq.io import read_blobs_from_pbf
 from osmpq.osm.blob import BlobData
@@ -40,8 +41,15 @@ def to_record_batch(blob_data: bytes) -> ElementBatch:
 
 def to_record_batches(blobs: Iterable[BlobData]) -> Iterable[ElementBatch]:
     for blob_data in blobs:
-        if blob_data.header.type == BlobType.OSM_HEADER.value:
+        if blob_data.header.type == BlobType.OSM_DATA:
             yield to_record_batch(blob_data.blob_data)
+
+
+def create_elements_writer(path: str, config: WriterConfig) -> ElementsWriter:
+    return ElementsWriter(
+        path=path,
+        config=config,
+    )
 
 
 def to_elements_parquet(
@@ -49,7 +57,7 @@ def to_elements_parquet(
     output_path: str,
     writer_config: WriterConfig,
 ) -> None:
-    blobs = tqdm(blobs, desc="Reading blobs", unit_scale=True)
+    blobs = tqdm(blobs, desc="Processing blobs", unit_scale=True)
     batches = to_record_batches(blobs)
     with create_elements_writer(output_path, writer_config) as writer:
         for batch in batches:
@@ -62,6 +70,7 @@ def pbf_to_elements_parquet(
     header_output_filename: str | None,
     writer_config: WriterConfig,
 ) -> None:
+    clear_output_path(output_path)
     blobs = read_blobs_from_pbf(pbf_filename)
     if header_output_filename is not None:
         blobs = header_extractor(blobs, header_output_filename)
@@ -75,5 +84,5 @@ def pbf_parquet_to_elements_parquet(
     writer_config: WriterConfig,
 ) -> None:
     batches = read_blobs_from_parquet(blob_parquet_filename)
-    blobs = (from_record_batch(batch) for batch in batches)
+    blobs = (blob for batch in batches for blob in from_record_batch(batch))
     to_elements_parquet(blobs, output_path, writer_config)
