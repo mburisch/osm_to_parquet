@@ -6,11 +6,11 @@ from typing import TypeVar
 
 import click
 
-from osmpq.blobs import pbf_to_blob_parquet
 from osmpq.elements import pbf_parquet_to_elements_parquet
 from osmpq.elements import pbf_to_elements_parquet
 from osmpq.io import WriterConfig
 from osmpq.io import clear_output_path
+from osmpq.split import split_pbf
 
 CommandFn = TypeVar("CommandFn", bound=Callable[..., Any])
 

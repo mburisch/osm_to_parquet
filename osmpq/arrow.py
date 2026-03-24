@@ -10,15 +10,6 @@ from osmpq.osm.types import OsmRelation
 from osmpq.osm.types import OsmTags
 from osmpq.osm.types import OsmWay
 
-ARROW_BLOB_SCHEMA = pa.schema(
-    [
-        ("blob_type", pa.string()),
-        ("header_data", pa.binary()),
-        ("blob_data", pa.binary()),
-    ]
-)
-
-
 ARROW_TAG_FIELD = pa.map_(pa.string(), pa.string())
 
 ARROW_NODE_FIELDS = [
@@ -73,19 +64,6 @@ ARROW_RELATION_FIELDS = [
 ]
 
 ARROW_RELATION_SCHEMA = pa.schema(ARROW_RELATION_FIELDS)
-
-
-def record_batches_for_blobs(blobs: Sequence[BlobData]) -> pa.RecordBatch:
-    blob_type = [blob.header.type for blob in blobs]
-    header_data = [blob.header_data for blob in blobs]
-    blob_data = [blob.blob_data for blob in blobs]
-
-    arrays = [
-        pa.array(blob_type, type=pa.string()),
-        pa.array(header_data, type=pa.binary()),
-        pa.array(blob_data, type=pa.binary()),
-    ]
-    return pa.RecordBatch.from_arrays(arrays, schema=ARROW_BLOB_SCHEMA)
 
 
 def _get_tags_array(tags: OsmTags) -> Sequence[tuple[str, str]]:

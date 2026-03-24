@@ -210,9 +210,3 @@ class ElementsWriter:
         self.nodes.close()
         self.ways.close()
         self.relations.close()
-
-
-def read_blobs_from_parquet(filename: str) -> Iterable[pa.RecordBatch]:
-    fs, path = get_fs(filename)
-    ds = pyarrow.dataset.dataset(path, filesystem=fs, format="parquet", schema=ARROW_BLOB_SCHEMA)
-    yield from ds.to_batches()
