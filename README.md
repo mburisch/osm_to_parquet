@@ -12,7 +12,7 @@ files should be read and converted to actual OSM elements (nodes, ways, relation
 
 Convert PBF to Parquet file
 ```bash
-pbf_extract blobs \
+osmpq-pbf-extract blobs \
     --pbf-filename path_to_pbf.pbf \
     --output-path blobs_output_folder \
     --header-output-filename option_header_path.json
@@ -20,7 +20,7 @@ pbf_extract blobs \
 
 In parallel for every Parquet file call
 ```bash
-pbf_extract parquet-elements \
+osmpq-pbf-extract parquet-elements \
     --blob-parquet-filename path_to_one_blob_parquet_file.parquet \
     --output-path elements_output_folder
 ```
