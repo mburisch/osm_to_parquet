@@ -5,12 +5,14 @@
 * Convert a pbf file to parquet with nodes, ways, and relations
 
 For best efficiency split the OSM pbf into smaller files to later convert them in parallel.
-Splitting the pbf files supports reading and writing to cloud (e.g. http, s3, gcs) directly.
 Once the pbf file is split into smaller parts, use multiple machines (or processes) to
 extract the elements (nodes, ways, relations) and store as Parquet files.
 
 Splitting the pbf files is generally I/O limited as it does very little actual processing.
 Processing a pbf file is compute limited, so it will profit from parallelization. 
+
+Both splitting and converting use fsspec for I/O, so you can (and should) read and write directly
+to cloud storage.
 
 Convert PBF to Parquet file
 ```bash
