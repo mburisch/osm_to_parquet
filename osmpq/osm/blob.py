@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import BinaryIO
 
+from google.protobuf.json_format import MessageToDict
+
 from osmpq.protos.fileformat_pb2 import Blob
 from osmpq.protos.fileformat_pb2 import BlobHeader
 from osmpq.protos.osmformat_pb2 import HeaderBlock
@@ -86,3 +88,12 @@ def decode_header_blob(blob_data: bytes) -> HeaderBlock:
 def decode_primtive_blob(blob_data: bytes) -> PrimitiveBlock:
     data = decode_blob_data(blob_data)
     return PrimitiveBlock.FromString(data)
+
+
+def decode_header_blob_to_dict(blob_data: bytes) -> dict:
+    header = decode_header_blob(blob_data)
+    message = MessageToDict(header, preserving_proto_field_name=True, always_print_fields_with_no_presence=True)
+    message["bbox"] = {k: int(v) / 10**9 for k, v in message["bbox"].items()}
+    message["osmosis_replication_timestamp"] = int(message["osmosis_replication_timestamp"])
+    message["osmosis_replication_sequence_number"] = int(message["osmosis_replication_sequence_number"])
+    return message

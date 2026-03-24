@@ -11,11 +11,12 @@ from osmpq.arrow import ARROW_WAY_SCHEMA
 from osmpq.arrow import record_batch_for_nodes
 from osmpq.arrow import record_batch_for_relations
 from osmpq.arrow import record_batch_for_ways
+from osmpq.blobs import from_record_batch
 from osmpq.blobs import header_extractor
 from osmpq.io import ElementBatch
-from osmpq.io import ElementsWriter
 from osmpq.io import WriterConfig
 from osmpq.io import create_elements_writer
+from osmpq.io import read_blobs_from_parquet
 from osmpq.io import read_blobs_from_pbf
 from osmpq.osm.blob import BlobData
 from osmpq.osm.blob import BlobType
@@ -43,6 +44,18 @@ def to_record_batches(blobs: Iterable[BlobData]) -> Iterable[ElementBatch]:
             yield to_record_batch(blob_data.blob_data)
 
 
+def to_elements_parquet(
+    blobs: Iterable[BlobData],
+    output_path: str,
+    writer_config: WriterConfig,
+) -> None:
+    blobs = tqdm(blobs, desc="Reading blobs", unit_scale=True)
+    batches = to_record_batches(blobs)
+    with create_elements_writer(output_path, writer_config) as writer:
+        for batch in batches:
+            writer.write(batch)
+
+
 def pbf_to_elements_parquet(
     pbf_filename: str,
     output_path: str,
@@ -53,9 +66,14 @@ def pbf_to_elements_parquet(
     if header_output_filename is not None:
         blobs = header_extractor(blobs, header_output_filename)
 
-    blobs = tqdm(blobs, desc="Reading blobs", unit_scale=True)
-    batches = to_record_batches(blobs)
+    to_elements_parquet(blobs, output_path, writer_config)
 
-    with create_elements_writer(output_path, writer_config) as writer:
-        for batch in batches:
-            writer.write(batch)
+
+def pbf_parquet_to_elements_parquet(
+    blob_parquet_filename: str,
+    output_path: str,
+    writer_config: WriterConfig,
+) -> None:
+    batches = read_blobs_from_parquet(blob_parquet_filename)
+    blobs = (from_record_batch(batch) for batch in batches)
+    to_elements_parquet(blobs, output_path, writer_config)

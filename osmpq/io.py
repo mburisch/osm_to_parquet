@@ -9,21 +9,21 @@ from typing import Iterable
 
 import fsspec
 import pyarrow as pa
-import pyarrow.fs
+import pyarrow.dataset
 import pyarrow.parquet as pq
-from google.protobuf.json_format import MessageToDict
+from fsspec.spec import AbstractFileSystem
 
 from osmpq.arrow import ARROW_BLOB_SCHEMA
 from osmpq.arrow import ARROW_NODE_SCHEMA
 from osmpq.arrow import ARROW_RELATION_SCHEMA
 from osmpq.arrow import ARROW_WAY_SCHEMA
 from osmpq.osm.blob import BlobData
-from osmpq.osm.blob import decode_header_blob
+from osmpq.osm.blob import decode_header_blob_to_dict
 from osmpq.osm.blob import read_blobs
 
 
-def get_arrow_fs(path: str) -> tuple[pa.fs.FileSystem, str]:
-    fs, base_path = pyarrow.fs.FileSystem.from_uri(path)
+def get_fs(path: str) -> tuple[AbstractFileSystem, str]:
+    fs, base_path = fsspec.core.url_to_fs(path)
     return fs, base_path
 
 
@@ -33,22 +33,21 @@ def read_blobs_from_pbf(filename: str) -> Iterable[BlobData]:
 
 
 def write_header_as_json(filename: str, blob_data: bytes) -> None:
-    header = decode_header_blob(blob_data)
-    message = MessageToDict(header, preserving_proto_field_name=True, always_print_fields_with_no_presence=True)
+    header = decode_header_blob_to_dict(blob_data)
 
     with fsspec.open(filename, "wb") as fout:
-        fout.write(json.dumps(message).encode())
+        fout.write(json.dumps(header, indent=2).encode())
 
 
-def clear_output_path(fs: pa.fs.FileSytem, path: str) -> None:
-    fs.create_dir(path, recursive=True)
-    fs.delete_dir_contents(path)
+def clear_output_path(fs: AbstractFileSystem, path: str) -> None:
+    if fs.exists(path):
+        fs.rm(path, recursive=True)
+    fs.makedirs(path, exist_ok=True)
 
 
 @dataclass
 class WriterConfig:
     max_rows_per_row_group: int | None = None
-    max_row_group_size_bytes: int | None = None
     max_rows_per_file: int | None = None
     max_file_size_bytes: int | None = None
 
@@ -61,7 +60,7 @@ class Writer:
     written_bytes: int = 0
 
     @classmethod
-    def create(cls, fs: pa.fs.FileSytem, filename: str, schema: pa.Schema) -> Writer:
+    def create(cls, fs: AbstractFileSystem, filename: str, schema: pa.Schema) -> Writer:
         writer = pq.ParquetWriter(
             filename,
             schema=schema,
@@ -83,7 +82,7 @@ class Writer:
 
 class MultiParquetWriter:
     def __init__(
-        self, fs: pa.fs.FileSytem, base_path: str, filename_template: str, schema: pa.Schema, config: WriterConfig
+        self, fs: AbstractFileSystem, base_path: str, filename_template: str, schema: pa.Schema, config: WriterConfig
     ) -> None:
         self.fs = fs
         self.base_path = base_path
@@ -133,10 +132,6 @@ class MultiParquetWriter:
 
         return False
 
-        # if self._writer.written_batches % 10 == 0:
-        #     if self.fs.get_file_info(self._writer.filename).size >= self.writer_config.max_file_size:
-        #         return True
-
     def close(self) -> None:
         if self._writer is not None:
             self._writer.close()
@@ -157,7 +152,7 @@ class ElementBatch:
 
 
 class ElementsWriter:
-    def __init__(self, fs: pa.fs.FileSytem, base_path: str, config: WriterConfig) -> None:
+    def __init__(self, fs: AbstractFileSystem, base_path: str, config: WriterConfig) -> None:
         self.fs = fs
 
         self.nodes = MultiParquetWriter(
@@ -197,9 +192,15 @@ class ElementsWriter:
 
 
 def create_elements_writer(path: str, config: WriterConfig) -> ElementsWriter:
-    fs, base_path = get_arrow_fs(path)
+    fs, base_path = get_fs(path)
     return ElementsWriter(
         fs=fs,
         base_path=base_path,
         config=config,
     )
+
+
+def read_blobs_from_parquet(filename: str) -> Iterable[pa.RecordBatch]:
+    fs, path = get_fs(filename)
+    ds = pa.dataset.dataset(path, filesystem=fs, format="parquet", schema=ARROW_BLOB_SCHEMA)
+    yield from ds.to_batches()

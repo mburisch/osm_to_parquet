@@ -12,7 +12,13 @@ dependencies = [
     "tqdm>=4.67.3",
 ]
 
+[project.scripts]
+osmpq-pbf-extract = "osmpq.cli.pbf_extract:main"
+
 [dependency-groups]
+cli = [
+    "click>=8.3.1",
+]
 dev = [
     "mypy>=1.19.1",
     "ruff>=0.15.5",
