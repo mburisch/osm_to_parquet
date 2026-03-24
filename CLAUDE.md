@@ -13,17 +13,27 @@ Converts OpenStreetMap PBF files to Apache Parquet format. Two implementations:
 ### Rust
 ```bash
 cargo build --release          # requires protoc installed for prost-build
-cargo run --release -- --pbf-filename <path> --output-path <output_dir>
 cargo test
 ```
 
+> **Note:** `src/main.rs` currently has CLI arg parsing commented out with hardcoded local paths. To run, either edit those paths directly or restore the `Args::parse()` call. Input/output paths use `object_store` URL format: `file:///path`, `s3://bucket/prefix`, or `https://...`.
+>
+> Default thread counts: 8 blob-decoding threads, 16 parquet-encoding threads, 2 writer threads (tunable via `--blob-threads`, `--parquet-threads`, `--writer-threads` once CLI is wired up).
+
 ### Python
 ```bash
-uv sync                        # install dependencies
+uv sync                        # install core dependencies
+uv sync --group cli            # also install click (required for CLI)
 uv run ruff check osmpq/       # lint
 uv run ruff format osmpq/      # format
 uv run mypy osmpq/             # type check
 ```
+
+Python CLI (`osmpq-pbf-extract`) subcommands:
+- `blobs` — PBF → intermediate blob Parquet files
+- `osm-elements` — PBF → nodes/ways/relations Parquet (one-shot)
+- `parquet-elements` — blob Parquet → nodes/ways/relations Parquet
+- `clear-output-path` — clear an output directory
 
 ## Architecture (Rust)
 
