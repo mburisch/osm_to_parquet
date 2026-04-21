@@ -1,23 +1,37 @@
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use crossbeam_channel::bounded;
 use osm_to_parquet::io::AsyncFileWriter;
 use osm_to_parquet::io::{ObjectStoreWriter, open_stream};
-use osm_to_parquet::osm::pbf::{AsyncPbfReader, PbfReader};
+use osm_to_parquet::osm::pbf::AsyncPbfReader;
+use osm_to_parquet::parquet::blobs::BlobParquetConfig;
 use osm_to_parquet::processor::{
-    generate_blobs_async, generate_parquet, process_blobs, write_files,
+    generate_blob_parquet, generate_blobs_async, generate_parquet, process_blobs, write_files,
 };
 use osm_to_parquet::progress::{ConsoleProgress, Progress};
-use std::path::Path;
 use std::thread;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
-    /// PBF filename
+    #[command(subcommand)]
+    command: Command,
+}
+
+#[derive(Subcommand, Debug)]
+enum Command {
+    /// Convert a PBF file to per-element (nodes/ways/relations) Parquet files.
+    Elements(ElementsArgs),
+    /// Convert a PBF file to Parquet files with blob_index, blob_type and blob_data columns.
+    Blobs(BlobsArgs),
+}
+
+#[derive(clap::Args, Debug)]
+struct ElementsArgs {
+    /// PBF filename (e.g. file:///path/to/data.osm.pbf, s3://..., https://...)
     #[arg(long)]
     pbf_filename: String,
 
-    /// Output directory
+    /// Output directory URL (e.g. file:///path/to/output, s3://bucket/prefix)
     #[arg(long)]
     output_path: String,
 
@@ -32,6 +46,25 @@ struct Args {
     /// Number of threads for writing files
     #[arg(long)]
     writer_threads: Option<usize>,
+}
+
+#[derive(clap::Args, Debug)]
+struct BlobsArgs {
+    /// PBF filename (e.g. file:///path/to/data.osm.pbf, s3://..., https://...)
+    #[arg(long)]
+    pbf_filename: String,
+
+    /// Output directory URL (e.g. file:///path/to/output, s3://bucket/prefix)
+    #[arg(long)]
+    output_path: String,
+
+    /// Maximum number of blobs per Parquet file.
+    #[arg(long)]
+    max_blobs_per_file: Option<usize>,
+
+    /// Maximum total size of stored blob_data bytes per Parquet file.
+    #[arg(long)]
+    max_file_size_bytes: Option<usize>,
 }
 
 #[derive(Debug, Clone)]
@@ -94,12 +127,6 @@ async fn process_pbf(
         drop(elements_receiver);
         drop(data_sender);
 
-        // for _ in 0..thread_config.writer_threads {
-        //     let data_receiver = data_receiver.clone();
-        //     let writer = writer.clone();
-        //     let progress = progress.clone();
-        //     s.spawn(move || write_files(data_receiver, writer, progress).unwrap());
-        // }
         for _ in 0..thread_config.writer_threads {
             let data_receiver = data_receiver.clone();
             let writer = writer.clone();
@@ -112,44 +139,51 @@ async fn process_pbf(
     });
 }
 
-async fn async_file_reader(progress: impl Progress + 'static) {
-    let filename = "file:///data/osm/us-latest.osm.pbf";
-    let mut pbf = AsyncPbfReader::new(open_stream(filename).await.unwrap());
-    while let Some(blob) = pbf.read_blob().await.unwrap() {
-        progress.inc_read_bytes(blob.size as u64);
-        progress.inc_pbf_blobs(1);
-        //pbf_sender.send(Arc::new(blob)).unwrap();
-    }
-}
+async fn process_pbf_blobs(
+    pbf_filename: &str,
+    output_path: &str,
+    config: BlobParquetConfig,
+    progress: impl Progress + 'static,
+) {
+    let writer = ObjectStoreWriter::new(output_path);
+    writer.clear().await.unwrap();
 
-async fn file_reader(progress: impl Progress + 'static) {
-    let filename = "/Users/mburisch/src/data/osm/us-latest.osm.pbf";
-    let mut pbf = PbfReader::for_local_file(filename).unwrap();
-
-    while let Some(blob) = pbf.read_blob().unwrap() {
-        progress.inc_read_bytes(blob.size as u64);
-        progress.inc_pbf_blobs(1);
-        //pbf_sender.send(Arc::new(blob)).unwrap();
-    }
+    let mut pbf = AsyncPbfReader::new(open_stream(pbf_filename).await.unwrap());
+    generate_blob_parquet(&mut pbf, writer, config, progress)
+        .await
+        .unwrap();
 }
 
 #[tokio::main]
 async fn main() {
-    //let args = Args::parse();
-
-    //let filename = "/data/osm/nevada-latest.osm.pbf";
-    //let filename = "/data/osm/us-latest.osm.pbf";
-    let url = "file:///Users/mburisch/src/data/osm/us-latest.osm.pbf";
-    //let url = "file:///data/osm/nevada-latest.osm.pbf";
-    //let url = "https://download.geofabrik.de/europe/isle-of-man-latest.osm.pbf";
-    //let url = "https://download.geofabrik.de/europe/greece-latest.osm.pbf";
-
-    let output_path = "file:///Users/mburisch/src/data/parquet";
-
+    let args = Args::parse();
     let progress = ConsoleProgress::new();
-    let thread_config = ThreadConfig::default();
 
-    //file_reader(progress.clone()).await;
-
-    process_pbf(url, output_path, thread_config, progress).await;
+    match args.command {
+        Command::Elements(args) => {
+            let mut thread_config = ThreadConfig::default();
+            if let Some(n) = args.blob_threads {
+                thread_config.blob_threads = n;
+            }
+            if let Some(n) = args.parquet_threads {
+                thread_config.parquet_threads = n;
+            }
+            if let Some(n) = args.writer_threads {
+                thread_config.writer_threads = n;
+            }
+            process_pbf(&args.pbf_filename, &args.output_path, thread_config, progress).await;
+        }
+        Command::Blobs(args) => {
+            let config = if args.max_blobs_per_file.is_none() && args.max_file_size_bytes.is_none()
+            {
+                BlobParquetConfig::default()
+            } else {
+                BlobParquetConfig {
+                    max_blobs_per_file: args.max_blobs_per_file,
+                    max_file_size_bytes: args.max_file_size_bytes,
+                }
+            };
+            process_pbf_blobs(&args.pbf_filename, &args.output_path, config, progress).await;
+        }
+    }
 }

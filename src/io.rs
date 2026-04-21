@@ -30,6 +30,7 @@ pub struct FileNameGenerator {
     nodes: Arc<AtomicUsize>,
     ways: Arc<AtomicUsize>,
     relations: Arc<AtomicUsize>,
+    blobs: Arc<AtomicUsize>,
 }
 
 impl FileNameGenerator {
@@ -38,6 +39,7 @@ impl FileNameGenerator {
             nodes: Arc::new(AtomicUsize::new(0)),
             ways: Arc::new(AtomicUsize::new(0)),
             relations: Arc::new(AtomicUsize::new(0)),
+            blobs: Arc::new(AtomicUsize::new(0)),
         }
     }
 
@@ -54,6 +56,11 @@ impl FileNameGenerator {
     pub fn next_relations(&self) -> String {
         let relations_index = self.relations.fetch_add(1, Ordering::Relaxed) + 1;
         format!("relations/relations_{relations_index:06}.parquet")
+    }
+
+    pub fn next_blobs(&self) -> String {
+        let blobs_index = self.blobs.fetch_add(1, Ordering::Relaxed) + 1;
+        format!("blobs_{blobs_index:06}.parquet")
     }
 }
 
@@ -108,6 +115,7 @@ pub trait AsyncFileWriter {
     async fn write_nodes(&self, data: Bytes) -> Result<()>;
     async fn write_ways(&self, data: Bytes) -> Result<()>;
     async fn write_relations(&self, data: Bytes) -> Result<()>;
+    async fn write_blobs(&self, data: Bytes) -> Result<()>;
     async fn clear(&self) -> Result<()>;
 }
 
@@ -156,6 +164,14 @@ impl AsyncFileWriter for ObjectStoreWriter {
             self.names.next_relations()
         ))
         .map_err(|e| std::io::Error::new(io::ErrorKind::Other, e))?;
+        let payload = PutPayload::from_bytes(data);
+        self.store.put(&filename, payload).await?;
+        Ok(())
+    }
+
+    async fn write_blobs(&self, data: Bytes) -> Result<()> {
+        let filename = Path::parse(format!("{}/{}", self.root_path, self.names.next_blobs()))
+            .map_err(|e| std::io::Error::new(io::ErrorKind::Other, e))?;
         let payload = PutPayload::from_bytes(data);
         self.store.put(&filename, payload).await?;
         Ok(())

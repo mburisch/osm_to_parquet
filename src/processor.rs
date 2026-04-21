@@ -9,6 +9,7 @@ use crate::io::AsyncFileWriter;
 use crate::osm::blobs::{BlobData, read_osm_data};
 use crate::osm::elements::{OsmData, decode_primitive_block};
 use crate::osm::pbf::{AsyncPbfReader, PbfReader};
+use crate::parquet::blobs::{BlobParquetAccumulator, BlobParquetConfig};
 use crate::parquet::records::Elements;
 use crate::parquet::schemas::{get_node_schema, get_relation_schema, get_way_schema};
 use crate::parquet::writer::{OsmParquetStreamWriter, ParquetData, ParquetMemoryStreamWriter};
@@ -136,5 +137,39 @@ pub async fn write_files(
             }
         }
     }
+    Ok(())
+}
+
+pub async fn generate_blob_parquet<R: AsyncRead + Unpin>(
+    reader: &mut AsyncPbfReader<R>,
+    writer: impl AsyncFileWriter,
+    config: BlobParquetConfig,
+    progress: impl Progress,
+) -> Result<()> {
+    let mut accumulator = BlobParquetAccumulator::new(config);
+    let mut index: i64 = 0;
+
+    while let Some(blob) = reader.read_raw_blob().await? {
+        progress.inc_read_bytes(blob.size as u64);
+        progress.inc_pbf_blobs(1);
+
+        accumulator.append(index, &blob);
+        index += 1;
+
+        if accumulator.should_flush() {
+            if let Some(bytes) = accumulator.flush()? {
+                progress.inc_files(1);
+                progress.inc_write_bytes(bytes.len() as u64);
+                writer.write_blobs(bytes).await?;
+            }
+        }
+    }
+
+    if let Some(bytes) = accumulator.flush()? {
+        progress.inc_files(1);
+        progress.inc_write_bytes(bytes.len() as u64);
+        writer.write_blobs(bytes).await?;
+    }
+
     Ok(())
 }

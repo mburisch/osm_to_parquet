@@ -1,5 +1,6 @@
 use std::io::{Cursor, ErrorKind, Read, Result};
 
+use bytes::Bytes;
 use flate2::bufread::ZlibDecoder;
 use lzma_rs::lzma2_decompress;
 
@@ -19,6 +20,23 @@ pub struct BlobData {
 impl BlobData {
     pub fn new(header: BlobHeader, blob: Blob, size: usize) -> Self {
         Self { header, blob, size }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct RawBlob {
+    pub blob_type: String,
+    pub data: Bytes,
+    pub size: usize,
+}
+
+impl RawBlob {
+    pub fn new(blob_type: String, data: Bytes, size: usize) -> Self {
+        Self {
+            blob_type,
+            data,
+            size,
+        }
     }
 }
 

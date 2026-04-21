@@ -1,4 +1,5 @@
 use byteorder::{ByteOrder, NetworkEndian, ReadBytesExt};
+use bytes::Bytes;
 use std::{
     fs::File,
     io::{Read, Result},
@@ -6,7 +7,7 @@ use std::{
 use tokio::io::{AsyncRead, AsyncReadExt};
 
 use crate::{
-    osm::blobs::BlobData,
+    osm::blobs::{BlobData, RawBlob},
     osmpbf::{Blob, BlobHeader},
 };
 use prost::Message;
@@ -107,6 +108,30 @@ impl<R: AsyncRead + Unpin> AsyncPbfReader<R> {
         Ok(Some(BlobData::new(
             header,
             blob,
+            4 + header_size + data_size,
+        )))
+    }
+
+    /// Reads the next blob asynchronously without decoding the Blob protobuf message.
+    /// Returns the blob type and the raw encoded Blob bytes. Ok(None) on clean EOF.
+    pub async fn read_raw_blob(&mut self) -> Result<Option<RawBlob>> {
+        let header_size = match self.read_u32_network().await {
+            Ok(v) => v as usize,
+            Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(None),
+            Err(e) => return Err(e),
+        };
+
+        let mut header_buf = vec![0; header_size];
+        self.reader.read_exact(&mut header_buf).await?;
+        let header = BlobHeader::decode(&header_buf[..])?;
+
+        let data_size = header.datasize as usize;
+        let mut blob_buf = vec![0; data_size];
+        self.reader.read_exact(&mut blob_buf).await?;
+
+        Ok(Some(RawBlob::new(
+            header.r#type,
+            Bytes::from(blob_buf),
             4 + header_size + data_size,
         )))
     }
